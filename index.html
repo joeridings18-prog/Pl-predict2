@@ -1,0 +1,403 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PL Predict</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:Arial,Helvetica,sans-serif;background:#f5f5f7;color:#171717}
+header{background:#3d195b;color:#fff;padding:22px 18px}
+.wrap{max-width:820px;margin:auto;padding:16px}
+h1{margin:0;font-size:29px}.sub{opacity:.9;margin-top:5px}
+.card{background:#fff;border-radius:16px;padding:18px;margin:14px 0;box-shadow:0 2px 10px #0001}
+.notice{background:#eee6f5;border-left:5px solid #3d195b;padding:13px;border-radius:10px;margin:14px 0}
+.weekTabs{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px}
+.weekTabs button,.players button,.pinBtn{border:0;border-radius:10px;padding:11px 15px;background:#eee;cursor:pointer;font-weight:700;white-space:nowrap}
+.weekTabs button.active,.players button.active,.pinBtn,.submit{background:#3d195b;color:#fff}
+.players{display:flex;flex-wrap:wrap;gap:8px}.players button{margin:0}
+.pinBox{margin-top:14px;padding:14px;border:1px solid #ddd;border-radius:12px;background:#fafafa}
+.pinRow{display:flex;gap:8px;margin-top:10px}
+.pinRow input{width:130px;padding:12px;border:1px solid #bbb;border-radius:9px;font-size:20px;letter-spacing:5px;text-align:center}
+.match{display:grid;grid-template-columns:1fr 110px;gap:12px;align-items:center;border-top:1px solid #eee;padding:14px 0}.match:first-child{border-top:0}
+.teams{font-weight:700}.kick{font-size:12px;color:#777;margin-top:4px}
+.score{display:flex;gap:5px}.score input{width:48px;padding:10px;border:1px solid #ccc;border-radius:8px;text-align:center;font-size:18px}
+.submit{border:0;border-radius:10px;width:100%;font-size:16px;padding:14px;margin-top:12px;font-weight:700;cursor:pointer}
+.submit:disabled{opacity:.55;cursor:not-allowed}
+.small{font-size:13px;color:#666}.ok{background:#e8f5e9;border-left:5px solid #2e7d32;padding:11px;border-radius:8px;margin-top:10px}.warn{background:#fff3cd;border-left:5px solid #b8860b;padding:11px;border-radius:8px;margin-top:10px}
+.statusRow{display:flex;justify-content:space-between;align-items:center;padding:11px 0;border-bottom:1px solid #eee}.statusRow:last-child{border-bottom:0}.submitted{font-weight:700}.waiting{color:#777}
+.revealPlayer{margin-top:18px}.revealRow{display:grid;grid-template-columns:1fr 70px;gap:8px;padding:8px 0;border-bottom:1px solid #eee}
+table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:10px;border-bottom:1px solid #eee}th:nth-child(n+2),td:nth-child(n+2){text-align:center}
+.monthTitle{font-weight:700}.hidden{display:none}.muted{color:#777}.pill{display:inline-block;background:#f0eaf5;color:#3d195b;padding:4px 8px;border-radius:999px;font-size:12px;font-weight:700}
+.sectionHead{display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap}
+@media(max-width:520px){
+ .match{grid-template-columns:1fr 105px}.teams{font-size:15px}.pinRow input{flex:1;width:auto}
+ .leader th,.leader td{padding:9px 5px;font-size:13px}
+}
+</style>
+</head>
+<body>
+<header><div class="wrap"><h1>⚽ PL Predict</h1><div class="sub">Monthly battles. One season champion. <span style="opacity:.7">• v8</span></div></div></header>
+<div class="wrap">
+
+<div class="gwNav" style="margin:14px 24px">
+  <select id="gameweekSelect" aria-label="Choose gameweek" style="width:100%;padding:14px 16px;border-radius:14px;border:1px solid #d1d5db;background:white;font-weight:700;font-size:16px"></select>
+</div>
+<div class="card" style="padding:14px 18px">
+  <div class="sectionHead"><h2 style="margin:0">Gameweek</h2><span id="monthPill" class="pill"></span></div>
+</div>
+
+<div id="notice" class="notice">Loading game…</div>
+
+<div class="card">
+<h2 style="margin-top:0">1. Choose your name</h2>
+<div id="players" class="players"></div>
+<div id="pinBox" class="pinBox hidden">
+  <b id="pinTitle">Enter your 4-digit PIN</b>
+  <div class="small" style="margin-top:5px">Your PIN is tied to your name and works on any device.</div>
+  <div class="pinRow">
+    <input id="pinInput" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="one-time-code" placeholder="••••">
+    <button id="pinBtn" class="pinBtn">Continue</button>
+  </div>
+</div>
+<div id="loginStatus" class="small" style="margin-top:8px"></div>
+</div>
+
+<div class="card">
+<h2 style="margin-top:0">2. Enter your predictions</h2>
+<div id="fixtures"></div>
+<button class="submit" id="submitBtn">🔒 Submit & Lock Predictions</button>
+<div id="status"></div>
+</div>
+
+<div class="card">
+<h2 style="margin-top:0">📋 Submission Status</h2>
+<div id="submissionStatus"><p class="small">Checking submissions…</p></div>
+</div>
+
+<div class="card">
+<h2 style="margin-top:0">👀 Predictions</h2>
+<div id="reveal"></div>
+</div>
+
+<div id="adminCard" class="card hidden">
+<div class="sectionHead">
+  <h2 style="margin:0">🛠 Results Admin</h2>
+  <span class="pill">Joe only</span>
+</div>
+<p class="small">Enter results as matches finish. Save one or several completed matches at a time and the monthly and season leaderboards update immediately.</p>
+<div id="adminResults"></div>
+<button class="submit" id="saveResultsBtn">💾 Save Entered Results</button>
+<div id="adminStatus"></div>
+</div>
+
+<div class="card">
+<div class="sectionHead">
+  <h2 style="margin:0">🏆 Leaderboard</h2>
+  <span class="small">Exact score = 16 • Correct result = 6</span>
+</div>
+<table class="leader" style="margin-top:10px">
+<thead><tr><th>Player</th><th id="monthHeader">Month</th><th>Season</th></tr></thead>
+<tbody id="leaderboard"></tbody>
+</table>
+<p class="small">The monthly column automatically starts from zero for each new month. Season points keep accumulating across 2026/27.</p>
+</div>
+
+</div>
+
+<script>
+const SUPABASE_URL="https://ekbwbibmicqfrompglyq.supabase.co";
+const SUPABASE_KEY="sb_publishable_3_9tReCoYfbZG5if1PKAPQ_am8pb55g";
+const PLAYERS=["Joe","Josh","Russ","Scott"];
+const SEASON_KEY="2026-27";
+const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
+
+let games=[];
+let game=null;
+let me=localStorage.getItem("pl_player")||"";
+let pin=sessionStorage.getItem("pl_pin")||"";
+let loggedIn=false;
+let adminDirty=false;
+
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const monthLabel=k=>{
+  if(!k)return "Month";
+  const [y,m]=k.split("-").map(Number);
+  return new Intl.DateTimeFormat("en-IE",{month:"long",year:"numeric"}).format(new Date(Date.UTC(y,m-1,1)));
+};
+
+function renderPlayers(){
+  document.getElementById("players").innerHTML=PLAYERS.map(p=>`<button class="${p===me?'active':''}" onclick="choosePlayer('${p}')">${p}</button>`).join("");
+}
+
+function renderWeekTabs(){ renderTabs(); }
+
+function currentDefaultGame(){
+  const now=Date.now();
+  return games.find(g=>new Date(g.reveal_at).getTime()>now) || games[games.length-1];
+}
+
+function renderFixtures(values=[]){
+  const fs=game?.fixtures||[];
+  document.getElementById("fixtures").innerHTML=fs.map((f,i)=>`<div class="match">
+    <div><div class="teams">${esc(f[0])} v ${esc(f[1])}</div><div class="kick">${esc(f[2])}</div></div>
+    <div class="score">
+      <input id="h${i}" type="number" min="0" max="20" value="${values?.[i]?.[0]??''}">
+      <input id="a${i}" type="number" min="0" max="20" value="${values?.[i]?.[1]??''}">
+    </div>
+  </div>`).join("");
+}
+
+async function choosePlayer(p){
+  me=p; loggedIn=false; pin="";
+  localStorage.setItem("pl_player",p);
+  sessionStorage.removeItem("pl_pin");
+  renderPlayers();
+  document.getElementById("pinBox").classList.remove("hidden");
+  document.getElementById("pinTitle").textContent=`Enter ${p}'s 4-digit PIN`;
+  document.getElementById("pinInput").value="";
+  document.getElementById("loginStatus").textContent="";
+  document.getElementById("status").innerHTML="";
+  renderFixtures();
+  setTimeout(()=>document.getElementById("pinInput").focus(),50);
+}
+
+async function login(useStored=false){
+  if(!me){alert("Choose your name first.");return;}
+  const entered=useStored?pin:document.getElementById("pinInput").value.trim();
+  if(!/^\d{4}$/.test(entered)){
+    document.getElementById("loginStatus").innerHTML='<span style="color:#b00020">Enter exactly 4 digits.</span>'; return;
+  }
+  const btn=document.getElementById("pinBtn"); btn.disabled=true; btn.textContent="Checking…";
+  const {data,error}=await sb.rpc("claim_or_login_player",{p_player:me,p_pin:entered});
+  btn.disabled=false; btn.textContent="Continue";
+  if(error||data!==true){
+    loggedIn=false;pin="";sessionStorage.removeItem("pl_pin");
+    document.getElementById("loginStatus").innerHTML='<span style="color:#b00020"><b>Incorrect PIN.</b> Try again.</span>'; return;
+  }
+  loggedIn=true;pin=entered;sessionStorage.setItem("pl_pin",pin);
+  document.getElementById("pinBox").classList.add("hidden");
+  document.getElementById("loginStatus").innerHTML=`✅ Logged in as <b>${esc(me)}</b>.`;
+  await loadOwn();
+  await loadAdminResults();
+}
+
+function renderTabs(){
+  const sel=document.getElementById("gameweekSelect");
+  if(!sel) return;
+  sel.innerHTML=games.map(g=>`<option value="${g.id}" ${game&&g.id===game.id?'selected':''}>MW ${g.gameweek}</option>`).join("");
+  sel.onchange=()=>selectGame(sel.value);
+  const idx=games.findIndex(g=>game&&g.id===game.id);
+  const prev=document.getElementById("prevGwBtn");
+  const next=document.getElementById("nextGwBtn");
+  if(prev){
+    prev.disabled=idx<=0;
+    prev.onclick=()=>{ if(idx>0) selectGame(games[idx-1].id); };
+  }
+  if(next){
+    next.disabled=idx<0||idx>=games.length-1;
+    next.onclick=()=>{ if(idx>=0&&idx<games.length-1) selectGame(games[idx+1].id); };
+  }
+}
+
+async function selectGame(id){
+  adminDirty=false;
+  game=games.find(g=>g.id===id)||game;
+  renderTabs();
+  localStorage.setItem("pl_game_id",game.id);
+  document.getElementById("monthPill").textContent=monthLabel(game.month_key);
+  document.getElementById("monthHeader").textContent=monthLabel(game.month_key).replace(/\s\d{4}$/,"");
+  document.getElementById("status").innerHTML="";
+  renderFixtures();
+  await refreshAll();
+  if(loggedIn && me==="Joe") await loadAdminResults(true);
+}
+
+async function loadOwn(){
+  if(!loggedIn||!game)return;
+  const {data,error}=await sb.rpc("get_own_prediction_with_pin",{p_game_id:game.id,p_player:me,p_pin:pin});
+  if(error)return;
+  const row=(data||[])[0];
+  const btn=document.getElementById("submitBtn");
+  btn.disabled=false;
+  if(row){
+    renderFixtures(row.predictions);
+    document.getElementById("status").innerHTML='<div class="ok">🔒 Your predictions are locked in for this gameweek.</div>';
+    btn.disabled=true;
+  }
+}
+
+async function submit(){
+  if(!game)return;
+  if(!me){alert("Choose your name first.");return;}
+  if(!loggedIn||!pin){alert("Enter your 4-digit PIN first.");document.getElementById("pinBox").classList.remove("hidden");return;}
+  const vals=game.fixtures.map((_,i)=>[document.getElementById("h"+i).value,document.getElementById("a"+i).value]);
+  if(vals.some(v=>v[0]===""||v[1]==="")){alert("Please enter a score for every match.");return;}
+  const btn=document.getElementById("submitBtn");btn.disabled=true;btn.textContent="Submitting…";
+  const {error}=await sb.rpc("submit_prediction_with_pin",{p_game_id:game.id,p_player:me,p_pin:pin,p_predictions:vals});
+  btn.textContent="🔒 Submit & Lock Predictions";
+  if(error){
+    document.getElementById("status").innerHTML='<div class="warn">❌ '+esc(error.message)+'</div>';
+    if(!String(error.message).toLowerCase().includes("already submitted"))btn.disabled=false;
+    return;
+  }
+  document.getElementById("status").innerHTML='<div class="ok">✅ Predictions submitted and locked. They cannot be changed.</div>';
+  await refreshSubmissionStatus();
+}
+
+async function refreshSubmissionStatus(){
+  if(!game)return;
+  const {data}=await sb.rpc("submitted_players",{p_game_id:game.id});
+  const done=new Set((data||[]).map(x=>x.player));
+  document.getElementById("submissionStatus").innerHTML=PLAYERS.map(p=>`<div class="statusRow"><b>${esc(p)}</b><span class="${done.has(p)?'submitted':'waiting'}">${done.has(p)?'✅ Submitted':'⏳ Waiting'}</span></div>`).join("");
+}
+
+async function refreshReveal(){
+  if(!game)return;
+  const revealed=Date.now()>=new Date(game.reveal_at).getTime();
+  if(!revealed){
+    document.getElementById("reveal").innerHTML="<p>Nothing is visible yet.</p>";return;
+  }
+  const {data}=await sb.rpc("revealed_predictions",{p_game_id:game.id});
+  const map=Object.fromEntries((data||[]).map(x=>[x.player,x.predictions]));
+  document.getElementById("reveal").innerHTML=PLAYERS.map(p=>`<div class="revealPlayer"><h3>${esc(p)}</h3>${
+    (map[p]||[]).map((v,i)=>`<div class="revealRow"><span>${esc(game.fixtures[i][0])} v ${esc(game.fixtures[i][1])}</span><b>${esc(v[0])} - ${esc(v[1])}</b></div>`).join("") || "<p class='small'>No submission.</p>"
+  }</div>`).join("");
+}
+
+
+async function loadAdminResults(force=false){
+  const card=document.getElementById("adminCard");
+  if(!(loggedIn && me==="Joe" && game)){
+    card.classList.add("hidden");
+    return;
+  }
+  card.classList.remove("hidden");
+
+  // Never overwrite Joe's unsaved typing during the 15-second background refresh.
+  if(adminDirty && !force) return;
+
+  const {data}=await sb.rpc("get_game_results",{p_game_id:game.id});
+  const map=Object.fromEntries((data||[]).map(r=>[r.fixture_index,[r.home_score,r.away_score]]));
+
+  document.getElementById("adminResults").innerHTML=game.fixtures.map((f,i)=>`<div class="match">
+    <div><div class="teams">${esc(f[0])} v ${esc(f[1])}</div><div class="kick">${esc(f[2])}</div></div>
+    <div class="score">
+      <input class="adminScore" id="rh${i}" type="number" min="0" max="20" value="${map[i]?.[0]??''}">
+      <input class="adminScore" id="ra${i}" type="number" min="0" max="20" value="${map[i]?.[1]??''}">
+    </div>
+  </div>`).join("");
+
+  document.querySelectorAll(".adminScore").forEach(el=>{
+    el.addEventListener("input",()=>{adminDirty=true;});
+  });
+  adminDirty=false;
+}
+
+async function saveResults(){
+  if(!(loggedIn && me==="Joe" && pin && game)) return;
+
+  const rows=[];
+  for(let i=0;i<game.fixtures.length;i++){
+    const h=document.getElementById("rh"+i).value;
+    const a=document.getElementById("ra"+i).value;
+    if(h!=="" && a!==""){
+      rows.push({fixture_index:i,home_score:Number(h),away_score:Number(a)});
+    }
+  }
+
+  if(!rows.length){
+    document.getElementById("adminStatus").innerHTML='<div class="warn">❌ Enter at least one completed result.</div>';
+    return;
+  }
+
+  const btn=document.getElementById("saveResultsBtn");
+  btn.disabled=true; btn.textContent="Saving…";
+
+  const {error}=await sb.rpc("save_results_with_pin",{
+    p_game_id:game.id,
+    p_player:me,
+    p_pin:pin,
+    p_results:rows
+  });
+
+  btn.disabled=false; btn.textContent="💾 Save Entered Results";
+
+  if(error){
+    document.getElementById("adminStatus").innerHTML='<div class="warn">❌ '+esc(error.message)+'</div>';
+    return;
+  }
+
+  adminDirty=false;
+  document.getElementById("adminStatus").innerHTML='<div class="ok">✅ Entered results saved. Leaderboards updated.</div>';
+  await refreshLeaderboard();
+  await loadAdminResults(true);
+}
+
+async function refreshLeaderboard(){
+  if(!game)return;
+  const [m,s]=await Promise.all([
+    sb.rpc("pl_leaderboard",{p_month_key:game.month_key,p_season_key:SEASON_KEY}),
+    sb.rpc("pl_leaderboard",{p_month_key:null,p_season_key:SEASON_KEY})
+  ]);
+  const mm=Object.fromEntries((m.data||[]).map(x=>[x.player,x]));
+  const ss=Object.fromEntries((s.data||[]).map(x=>[x.player,x]));
+  const sorted=[...PLAYERS].sort((a,b)=>(ss[b]?.points||0)-(ss[a]?.points||0)||(mm[b]?.points||0)-(mm[a]?.points||0));
+  document.getElementById("leaderboard").innerHTML=sorted.map(p=>`<tr><td><b>${esc(p)}</b></td><td>${mm[p]?.points||0}</td><td><b>${ss[p]?.points||0}</b></td></tr>`).join("");
+}
+
+function updateNotice(){
+  if(!game)return;
+  const reveal=new Date(game.reveal_at);
+  const open=Date.now()<reveal.getTime();
+  const n=document.getElementById("notice");
+  if(open){
+    const diff=reveal-Date.now();
+    const days=Math.floor(diff/86400000),hours=Math.floor((diff%86400000)/3600000),mins=Math.floor((diff%3600000)/60000);
+    n.innerHTML=`🔒 <b>MW ${game.gameweek}</b> predictions are hidden until the first kickoff.<br><span class="small">${days?days+"d ":""}${hours}h ${mins}m remaining.</span>`;
+  } else {
+    n.innerHTML=`🎉 <b>MW ${game.gameweek}</b> predictions are revealed.`;
+  }
+}
+
+async function refreshAll(){
+  updateNotice();
+  await Promise.all([refreshSubmissionStatus(),refreshReveal(),refreshLeaderboard()]);
+  if(loggedIn){
+    await loadOwn();
+  } else {
+    document.getElementById("adminCard").classList.add("hidden");
+  }
+}
+
+async function start(){
+  renderPlayers();
+  const {data,error}=await sb.rpc("list_pl_games");
+  if(error||!data?.length){
+    document.getElementById("notice").innerHTML='<div class="warn">Could not load gameweeks.</div>';return;
+  }
+  games=data;
+  const saved=localStorage.getItem("pl_game_id");
+  game=games.find(g=>g.id===saved)||currentDefaultGame();
+  renderTabs();
+  renderFixtures();
+  document.getElementById("monthPill").textContent=monthLabel(game.month_key);
+  document.getElementById("monthHeader").textContent=monthLabel(game.month_key).replace(/\s\d{4}$/,"");
+  if(me){
+    document.getElementById("pinTitle").textContent=`Enter ${me}'s 4-digit PIN`;
+    if(pin&&/^\d{4}$/.test(pin)) await login(true);
+    else document.getElementById("pinBox").classList.remove("hidden");
+  }
+  await refreshAll();
+}
+
+document.getElementById("pinBtn").onclick=()=>login(false);
+document.getElementById("pinInput").addEventListener("keydown",e=>{if(e.key==="Enter")login(false)});
+document.getElementById("submitBtn").onclick=submit;
+document.getElementById("saveResultsBtn").onclick=saveResults;
+start();
+// Automatic refresh disabled so form inputs can never be redrawn while Joe is typing.
+</script>
+</body>
+</html>
