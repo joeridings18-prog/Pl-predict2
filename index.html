@@ -90,7 +90,7 @@ details.predictionCard[open]>summary::after{transform:rotate(180deg)}
 </style>
 </head>
 <body>
-<header><div class="wrap"><h1>⚽ PL Predict</h1><div class="sub">Monthly battles. One season champion. <span style="opacity:.7">• v11.2</span></div></div></header>
+<header><div class="wrap"><h1>⚽ PL Predict</h1><div class="sub">Monthly battles. One season champion. <span style="opacity:.7">• v11.3</span></div></div></header>
 <div class="wrap">
 
 <div class="viewTabs" id="mainViewTabs">
@@ -534,7 +534,9 @@ function updateAiAccess(){
  document.getElementById("mainViewTabs").style.gridTemplateColumns=allowed?"repeat(4,1fr)":"repeat(2,1fr)";
  if(!allowed && (!document.getElementById("aiView").classList.contains("hidden") || !document.getElementById("matchView").classList.contains("hidden"))) showView("game");
 }
+let matchAutoTimer=null;
 function showView(view){
+ if(matchAutoTimer){clearInterval(matchAutoTimer);matchAutoTimer=null;}
  const ai=view==="ai"&&loggedIn&&me==="Joe";
  const stats=view==="stats";
  const match=view==="match"&&loggedIn&&me==="Joe";
@@ -548,9 +550,13 @@ function showView(view){
  document.getElementById("matchViewBtn").classList.toggle("active",match);
  if(stats)refreshStats();
  if(ai)refreshAiTracker();
- if(match)refreshMatchCentre();
+ if(match){refreshMatchCentre();matchAutoTimer=setInterval(()=>{if(!document.hidden&&loggedIn&&me==="Joe"&&!document.getElementById("matchView").classList.contains("hidden"))refreshMatchCentre(true);},120000);}
 }
-async function refreshMatchCentre(){
+let matchRefreshInProgress=false;
+async function refreshMatchCentre(silent=false){
+ if(matchRefreshInProgress)return;
+ matchRefreshInProgress=true;
+ try{
  const select=document.getElementById("matchRoundSelect"),root=document.getElementById("matchContent");
  if(!(loggedIn&&me==="Joe"))return;
  if(!games.length){root.textContent="No rounds loaded.";return;}
@@ -558,7 +564,7 @@ async function refreshMatchCentre(){
  select.innerHTML=games.map(g=>'<option value="'+esc(g.id)+'">'+esc(g.round_label||g.gameweek)+'</option>').join('');
  select.value=games.some(g=>g.id===previous)?previous:(game?.id||games[0].id);
  const g=games.find(x=>x.id===select.value);if(!g)return;
- root.innerHTML='<p class="small">Loading delayed scores…</p>';
+ if(!silent)root.innerHTML='<p class="small">Loading delayed scores…</p>';
  const revealed=Date.now()>=new Date(g.reveal_at).getTime();
  const isCL=g.competition==="UCL";
  const requests=["PL","ELC",...(isCL?["CL"]:[])].map(c=>fetch("https://ekbwbibmicqfrompglyq.supabase.co/functions/v1/football-scores?competition="+c).then(r=>r.json()).catch(()=>({error:true})));
@@ -580,9 +586,10 @@ async function refreshMatchCentre(){
  const seasonTotals=Object.fromEntries((seasonResp.data||[]).map(x=>[x.player,Number(x.points)||0]));
  const combined=p=>(seasonTotals[p]||0)-officialRound[p]+points[p];
  const feedOk=feeds.some(x=>Array.isArray(x.matches));
- root.innerHTML='<p class="small">'+(feedOk?'⚽ Delayed football scores connected':'⚠️ Football feed unavailable; showing recorded results')+' • '+Object.keys(official).length+'/'+rows.length+' official results • Provisional points never alter the official table.</p>'+
+ root.innerHTML='<p class="small">'+(feedOk?'⚽ Delayed football scores connected':'⚠️ Football feed unavailable; showing recorded results')+' • '+Object.keys(official).length+'/'+rows.length+' official results • Auto-refresh every 2 minutes while this tab is open • Provisional points never alter the official table.</p>'+
  (revealed?'<h3>🏆 Provisional overall standings</h3><table class="leader"><thead><tr><th>Player</th><th>Round</th><th>Season</th></tr></thead><tbody>'+[...PLAYERS].sort((a,b)=>combined(b)-combined(a)||points[b]-points[a]).map((p,i)=>'<tr><td><b>'+(i+1)+'. '+esc(p)+'</b></td><td>'+points[p]+'</td><td><b>'+combined(p)+'</b></td></tr>').join('')+'</tbody></table>':'<p>🔒 Predictions hidden until reveal.</p>')+
  '<h3>Fixtures</h3>'+rows.map(({f,i,m,r,live,score,provisional})=>'<details class="fixtureCompare"><summary><b>'+esc(f[0])+' v '+esc(f[1])+'</b><div class="small">'+(r?'Final (recorded): '+r.join('–'):live?esc(m.status)+': '+live.join('–')+' (delayed feed)':'Awaiting score')+'</div></summary><div class="small">'+esc(f[2]||'')+(provisional?' • Provisional score':'')+'</div>'+(revealed?'<div class="predGrid">'+PLAYERS.map(p=>{const v=picks[p]?.[i];return '<div class="predCell"><b>'+esc(p)+'</b><div class="predScore">'+(Array.isArray(v)?esc(v[0])+'–'+esc(v[1]):'—')+'</div><div class="predPts">'+(score&&Array.isArray(v)?'+'+calc(v,score):'')+'</div></div>';}).join('')+'</div>':'<p class="small">Predictions locked until reveal.</p>')+'</details>').join('');
+ }finally{matchRefreshInProgress=false;}
 }
 async function refreshAiTracker(){
  if(!(loggedIn&&me==="Joe"&&pin))return;
