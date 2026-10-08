@@ -97,7 +97,7 @@ details.predictionCard[open]>summary::after{transform:rotate(180deg)}
 </style>
 </head>
 <body>
-<header><div class="wrap"><h1>⚽ PL Predict</h1><div class="sub">Monthly battles. One season champion. <span style="opacity:.7">• v11.7</span></div></div></header>
+<header><div class="wrap"><h1>⚽ PL Predict</h1><div class="sub">Monthly battles. One season champion. <span style="opacity:.7">• v11.8</span></div></div></header>
 <div class="wrap">
 
 <div class="viewTabs" id="mainViewTabs">
@@ -116,7 +116,7 @@ details.predictionCard[open]>summary::after{transform:rotate(180deg)}
   <div class="sectionHead"><h2 style="margin:0">Prediction Round</h2><span id="monthPill" class="pill"></span></div>
 </div>
 
-<div id="notice" class="notice">Loading game…</div><div class="card"><h2>🔔 Phone reminders</h2><p class="small">Step 1: allow notifications on this device. Scheduled push reminders will be enabled after delivery testing.</p><button id="notifyBtn" class="submit" type="button">Enable Notifications</button><p id="notifyStatus" class="small"></p><button id="testNotifyBtn" class="submit" type="button" style="margin-top:8px">🧪 Send Test Notification</button></div>
+<div id="notice" class="notice">Loading game…</div><div class="card"><h2>🔔 Phone reminders</h2><p class="small">Step 1: allow notifications on this device. Scheduled push reminders will be enabled after delivery testing.</p><button id="notifyBtn" class="submit" type="button">Enable Notifications</button><p id="notifyStatus" class="small"></p><button id="subscribePushBtn" class="submit" type="button" style="margin-top:8px">📲 Register This Phone</button><button id="testNotifyBtn" class="submit" type="button" style="margin-top:8px">🧪 Send Test Notification</button></div>
 
 <div class="card">
 <h2 style="margin-top:0">1. Choose your name</h2>
@@ -759,6 +759,27 @@ document.getElementById("matchRoundSelect").onchange=refreshMatchCentre;
 document.getElementById("aiViewBtn").onclick=()=>showView("ai");
 document.getElementById("notifyBtn").addEventListener("click",async()=>{const out=document.getElementById("notifyStatus");if(!("Notification" in window)){out.textContent="Notifications are not supported in this browser.";return;}try{const permission=await Notification.requestPermission();out.textContent=permission==="granted"?"Notifications allowed. Push delivery is not configured yet.":permission==="denied"?"Notifications blocked in browser settings.":"Notification permission not granted.";}catch(err){out.textContent="Notification permission failed: "+err.message;}});
 document.getElementById("testNotifyBtn").addEventListener("click",async()=>{const out=document.getElementById("notifyStatus");try{if(!("serviceWorker" in navigator)||!("Notification" in window))throw Error("Notifications are not supported on this browser.");if(Notification.permission!=="granted")throw Error("Tap Enable Notifications first.");const reg=await navigator.serviceWorker.register("./sw.js",{scope:"./"});await navigator.serviceWorker.ready;await reg.showNotification("PL Predict test ⚽",{body:"Great! Notifications are working on this device.",tag:"pl-test",data:{url:"./"}});out.textContent="✅ Test notification requested. Check your Android notification panel.";}catch(err){out.textContent="⚠️ "+err.message;}});
+const VAPID_PUBLIC="BBXjfdKCoI2Yu7t_Who8CnVy_SIWs62JTJjm20k_FbayozSc2LadnZ6YMca2GRiuE2tq_AB5fKtInd120ockUd4";
+function urlBase64ToUint8Array(value){const base64=(value+"=".repeat((4-value.length%4)%4)).replace(/-/g,"+").replace(/_/g,"/");return Uint8Array.from(atob(base64),c=>c.charCodeAt(0));}
+document.getElementById("subscribePushBtn").addEventListener("click",async()=>{
+ const out=document.getElementById("notifyStatus"),btn=document.getElementById("subscribePushBtn");btn.disabled=true;
+ try{
+  if(!loggedIn||!me||!pin)throw Error("Log in with your player PIN first.");
+  if(!("serviceWorker" in navigator)||!("PushManager" in window))throw Error("Push notifications aren't supported in this browser.");
+  if(Notification.permission!=="granted")throw Error("Enable Notifications first.");
+  const reg=await navigator.serviceWorker.register("./sw.js",{scope:"./"});
+  await navigator.serviceWorker.ready;
+  const subscription=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:urlBase64ToUint8Array(VAPID_PUBLIC)});
+  const response=await fetch("https://ekbwbibmicqfrompglyq.supabase.co/functions/v1/push-register",{
+   method:"POST",headers:{"Content-Type":"application/json"},
+   body:JSON.stringify({player:me,pin,subscription:subscription.toJSON()})
+  });
+  const result=await response.json();
+  if(!response.ok||!result.ok)throw Error(result.error||"Could not register device.");
+  out.textContent="✅ This phone is registered for future remote push notifications. Scheduled delivery is not enabled yet.";
+ }catch(e){out.textContent="⚠️ "+(e.message||e);}
+ finally{btn.disabled=false;}
+});
 start();
 // Automatic refresh disabled so form inputs can never be redrawn while Joe is typing.
 </script>
