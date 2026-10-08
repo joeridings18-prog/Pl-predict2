@@ -90,7 +90,7 @@ details.predictionCard[open]>summary::after{transform:rotate(180deg)}
 </style>
 </head>
 <body>
-<header><div class="wrap"><h1>⚽ PL Predict</h1><div class="sub">Monthly battles. One season champion. <span style="opacity:.7">• v11.0</span></div></div></header>
+<header><div class="wrap"><h1>⚽ PL Predict</h1><div class="sub">Monthly battles. One season champion. <span style="opacity:.7">• v11.1</span></div></div></header>
 <div class="wrap">
 
 <div class="viewTabs" id="mainViewTabs">
@@ -552,24 +552,33 @@ function showView(view){
 }
 async function refreshMatchCentre(){
  const select=document.getElementById("matchRoundSelect"),root=document.getElementById("matchContent");
+ if(!(loggedIn&&me==="Joe"))return;
  if(!games.length){root.textContent="No rounds loaded.";return;}
  const previous=select.value||game?.id;
- select.innerHTML=games.map(g=>'<option value="'+esc(g.id)+'">'+esc(g.round_label||g.title)+'</option>').join('');
+ select.innerHTML=games.map(g=>'<option value="'+esc(g.id)+'">'+esc(g.round_label||g.gameweek)+'</option>').join('');
  select.value=games.some(g=>g.id===previous)?previous:(game?.id||games[0].id);
  const g=games.find(x=>x.id===select.value);if(!g)return;
- root.innerHTML='<p class="small">Loading scores and predictions…</p>';
+ root.innerHTML='<p class="small">Loading delayed scores…</p>';
  const revealed=Date.now()>=new Date(g.reveal_at).getTime();
- const [rr,pr]=await Promise.all([sb.rpc("get_game_results",{p_game_id:g.id}),revealed?sb.rpc("revealed_predictions",{p_game_id:g.id}):Promise.resolve({data:[]})]);
- if(rr.error||pr.error){root.innerHTML='<div class="warn">Could not load match data. Try refreshing.</div>';return;}
- const results=Object.fromEntries((rr.data||[]).map(r=>[Number(r.fixture_index),[Number(r.home_score),Number(r.away_score)]]));
+ const isCL=g.competition==="UCL";
+ const requests=["PL","ELC",...(isCL?["CL"]:[])].map(c=>fetch("https://ekbwbibmicqfrompglyq.supabase.co/functions/v1/football-scores?competition="+c).then(r=>r.json()).catch(()=>({error:true})));
+ const [rr,pr,...feeds]=await Promise.all([sb.rpc("get_game_results",{p_game_id:g.id}),revealed?sb.rpc("revealed_predictions",{p_game_id:g.id}):Promise.resolve({data:[]}),...requests]);
+ if(rr.error||pr.error){root.innerHTML='<div class="warn">Could not load match data.</div>';return;}
+ const official=Object.fromEntries((rr.data||[]).map(r=>[Number(r.fixture_index),[Number(r.home_score),Number(r.away_score)]]));
  const picks=Object.fromEntries((pr.data||[]).map(p=>[p.player,p.predictions]));
+ const norm=n=>String(n||"").toLowerCase().replace(/\\b(football club|fc|afc)\\b/g,"").replace(/[^a-z0-9]/g,"");
+ const aliases={"manchesterunited":"manunited","manchestercity":"mancity","tottenhamhotspur":"tottenham","brightonhovealbion":"brighton","wolverhamptonwanderers":"wolves","queensparkrangers":"qpr","westbromwichalbion":"westbrom","newcastleunited":"newcastle","leedsunited":"leeds","sheffieldunited":"sheffieldunited"};
+ const canonical=n=>{const v=norm(n);return aliases[v]||v;};
+ const all=feeds.flatMap(x=>Array.isArray(x.matches)?x.matches:[]);
+ const find=f=>all.find(m=>canonical(m.home)===canonical(f[0])&&canonical(m.away)===canonical(f[1])&&Math.abs(new Date(m.utcDate).getTime()-new Date(f[3]||f[2]).getTime())<86400000*3);
  const points=Object.fromEntries(PLAYERS.map(p=>[p,0]));
- const calc=(p,r)=>{if(!Array.isArray(p)||!r)return 0;return Number(p[0])===r[0]&&Number(p[1])===r[1]?16:Math.sign(Number(p[0])-Number(p[1]))===Math.sign(r[0]-r[1])?6:0;};
- for(const [i,r] of Object.entries(results))for(const p of PLAYERS)points[p]+=calc(picks[p]?.[Number(i)],r);
- const done=Object.keys(results).length;
- root.innerHTML='<p class="small"><b>'+esc(g.round_label||g.title)+'</b> • '+done+'/'+g.fixtures.length+' results recorded. These are recorded results, not real-time live scores.</p>'+
- (revealed?'<h3>🏆 Round points so far</h3><div class="spoonRow" style="font-weight:700"><span>Player</span><span>Points</span></div>'+[...PLAYERS].sort((a,b)=>points[b]-points[a]).map(p=>'<div class="spoonRow"><b>'+esc(p)+'</b><b>'+points[p]+'</b></div>').join(''):'<p>🔒 Predictions hidden until reveal.</p>')+
- '<h3>Fixtures</h3>'+g.fixtures.map((f,i)=>{const r=results[i];return '<details class="fixtureCompare"><summary><b>'+esc(f[0])+' v '+esc(f[1])+'</b> <span class="small">'+(r?esc(r[0])+'–'+esc(r[1])+' • Recorded final':'Awaiting result')+'</span></summary><div class="small">'+esc(f[2]||'')+'</div>'+(revealed?'<div class="predGrid">'+PLAYERS.map(p=>{const v=picks[p]?.[i];return '<div class="predCell"><b>'+esc(p)+'</b><div class="predScore">'+(Array.isArray(v)?esc(v[0])+'–'+esc(v[1]):'—')+'</div><div class="predPts">'+(r&&Array.isArray(v)?'+'+calc(v,r):'')+'</div></div>'}).join('')+'</div>':'<p class="small">Predictions locked until reveal.</p>')+'</details>'}).join('');
+ const calc=(p,r)=>!Array.isArray(p)||!r?0:Number(p[0])===r[0]&&Number(p[1])===r[1]?16:Math.sign(Number(p[0])-Number(p[1]))===Math.sign(r[0]-r[1])?6:0;
+ const rows=g.fixtures.map((f,i)=>{const m=find(f),r=official[i],valid=m&&m.homeScore!==null&&m.awayScore!==null,live=valid?[Number(m.homeScore),Number(m.awayScore)]:null;return {f,i,m,r,live,score:r||live,provisional:!r&&!!live};});
+ for(const row of rows)if(row.score)for(const p of PLAYERS)points[p]+=calc(picks[p]?.[row.i],row.score);
+ const feedOk=feeds.some(x=>Array.isArray(x.matches));
+ root.innerHTML='<p class="small">'+(feedOk?'⚽ Delayed football scores connected':'⚠️ Football feed unavailable; showing recorded results')+' • '+Object.keys(official).length+'/'+rows.length+' official results • Provisional points never alter the official table.</p>'+
+ (revealed?'<h3>🏆 Provisional round standings</h3>'+[...PLAYERS].sort((a,b)=>points[b]-points[a]).map((p,i)=>'<div class="statusRow"><b>'+(i+1)+'. '+esc(p)+'</b><b>'+points[p]+' pts</b></div>').join(''):'<p>🔒 Predictions hidden until reveal.</p>')+
+ '<h3>Fixtures</h3>'+rows.map(({f,i,m,r,live,score,provisional})=>'<details class="fixtureCompare"><summary><b>'+esc(f[0])+' v '+esc(f[1])+'</b><div class="small">'+(r?'Final (recorded): '+r.join('–'):live?esc(m.status)+': '+live.join('–')+' (delayed feed)':'Awaiting score')+'</div></summary><div class="small">'+esc(f[2]||'')+(provisional?' • Provisional score':'')+'</div>'+(revealed?'<div class="predGrid">'+PLAYERS.map(p=>{const v=picks[p]?.[i];return '<div class="predCell"><b>'+esc(p)+'</b><div class="predScore">'+(Array.isArray(v)?esc(v[0])+'–'+esc(v[1]):'—')+'</div><div class="predPts">'+(score&&Array.isArray(v)?'+'+calc(v,score):'')+'</div></div>';}).join('')+'</div>':'<p class="small">Predictions locked until reveal.</p>')+'</details>').join('');
 }
 async function refreshAiTracker(){
  if(!(loggedIn&&me==="Joe"&&pin))return;
