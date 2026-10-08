@@ -7,15 +7,15 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 *{box-sizing:border-box}
-body{margin:0;font-family:Arial,Helvetica,sans-serif;background:#f5f5f7;color:#171717}
-header{background:#3d195b;color:#fff;padding:22px 18px}
+body{margin:0;font-family:Arial,Helvetica,sans-serif;background:#f8f7f7;color:#171717}
+header{background:#d71920;color:#fff;padding:22px 18px}
 .wrap{max-width:820px;margin:auto;padding:16px}
 h1{margin:0;font-size:29px}.sub{opacity:.9;margin-top:5px}
 .card{background:#fff;border-radius:16px;padding:18px;margin:14px 0;box-shadow:0 2px 10px #0001}
-.notice{background:#eee6f5;border-left:5px solid #3d195b;padding:13px;border-radius:10px;margin:14px 0}
+.notice{background:#fff0f0;border-left:5px solid #d71920;padding:13px;border-radius:10px;margin:14px 0}
 .weekTabs{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px}
 .weekTabs button,.players button,.pinBtn{border:0;border-radius:10px;padding:11px 15px;background:#eee;cursor:pointer;font-weight:700;white-space:nowrap}
-.weekTabs button.active,.players button.active,.pinBtn,.submit{background:#3d195b;color:#fff}
+.weekTabs button.active,.players button.active,.pinBtn,.submit{background:#d71920;color:#fff}
 .players{display:flex;flex-wrap:wrap;gap:8px}.players button{margin:0}
 .pinBox{margin-top:14px;padding:14px;border:1px solid #ddd;border-radius:12px;background:#fafafa}
 .pinRow{display:flex;gap:8px;margin-top:10px}
@@ -29,7 +29,7 @@ h1{margin:0;font-size:29px}.sub{opacity:.9;margin-top:5px}
 .statusRow{display:flex;justify-content:space-between;align-items:center;padding:11px 0;border-bottom:1px solid #eee}.statusRow:last-child{border-bottom:0}.submitted{font-weight:700}.waiting{color:#777}
 .revealPlayer{margin-top:18px}.revealRow{display:grid;grid-template-columns:1fr 70px;gap:8px;padding:8px 0;border-bottom:1px solid #eee}
 table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:10px;border-bottom:1px solid #eee}th:nth-child(n+2),td:nth-child(n+2){text-align:center}
-.monthTitle{font-weight:700}.hidden{display:none}.muted{color:#777}.pill{display:inline-block;background:#f0eaf5;color:#3d195b;padding:4px 8px;border-radius:999px;font-size:12px;font-weight:700}
+.monthTitle{font-weight:700}.hidden{display:none}.muted{color:#777}.pill{display:inline-block;background:#ffe8e9;color:#d71920;padding:4px 8px;border-radius:999px;font-size:12px;font-weight:700}
 .sectionHead{display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap}
 @media(max-width:520px){
  .match{grid-template-columns:1fr 105px}.teams{font-size:15px}.pinRow input{flex:1;width:auto}
@@ -55,9 +55,9 @@ table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:10px;bor
 }
 
 .viewTabs{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:14px 0}
-.viewTab{border:0;border-radius:12px;padding:13px 10px;font-weight:800;background:#e9e9ec;color:#333;cursor:pointer}
-.viewTab.active{background:#3d195b;color:#fff}
-.statsHero{background:linear-gradient(135deg,#3d195b,#5d2b7b);color:#fff;border-radius:16px;padding:18px;margin:14px 0}
+.viewTab{border:0;border-radius:12px;padding:13px 10px;font-weight:800;background:#eeeeef;color:#333;cursor:pointer}
+.viewTab.active{background:#d71920;color:#fff}
+.statsHero{background:linear-gradient(135deg,#d71920,#a10e17);color:#fff;border-radius:16px;padding:18px;margin:14px 0}
 .statsHero h2{margin:0 0 5px}.statsHero .small{color:#eee}
 .playerStatsGrid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
 .playerStatCard{border:1px solid #e7e7ea;border-radius:14px;padding:14px;background:#fff}
@@ -85,12 +85,12 @@ details.predictionCard>summary h2{margin:0}
 details.predictionCard>summary::after{content:"▼";font-size:14px;color:#666;transition:transform .2s}
 details.predictionCard[open]>summary::after{transform:rotate(180deg)}
 .predictionInner{padding:0 18px 18px}
-.fixtureSection{margin:18px 0 6px;padding:8px 10px;border-radius:9px;background:#f0eaf5;color:#3d195b;font-weight:800;font-size:14px}
+.fixtureSection{margin:18px 0 6px;padding:8px 10px;border-radius:9px;background:#ffe8e9;color:#d71920;font-weight:800;font-size:14px}
 .fixtureSection.champ{background:#eef4ff;color:#174a8b}
 </style>
 </head>
 <body>
-<header><div class="wrap"><h1>⚽ PL Predict</h1><div class="sub">Monthly battles. One season champion. <span style="opacity:.7">• v10.8</span></div></div></header>
+<header><div class="wrap"><h1>⚽ PL Predict</h1><div class="sub">Monthly battles. One season champion. <span style="opacity:.7">• v10.9</span></div></div></header>
 <div class="wrap">
 
 <div class="viewTabs" id="mainViewTabs">
