@@ -97,7 +97,7 @@ details.predictionCard[open]>summary::after{transform:rotate(180deg)}
 </style>
 </head>
 <body>
-<header><div class="wrap"><h1>⚽ PL Predict</h1><div class="sub">Monthly battles. One season champion. <span style="opacity:.7">• v11.5</span></div></div></header>
+<header><div class="wrap"><h1>⚽ PL Predict</h1><div class="sub">Monthly battles. One season champion. <span style="opacity:.7">• v11.6</span></div></div></header>
 <div class="wrap">
 
 <div class="viewTabs" id="mainViewTabs">
@@ -116,7 +116,7 @@ details.predictionCard[open]>summary::after{transform:rotate(180deg)}
   <div class="sectionHead"><h2 style="margin:0">Prediction Round</h2><span id="monthPill" class="pill"></span></div>
 </div>
 
-<div id="notice" class="notice">Loading game…</div>
+<div id="notice" class="notice">Loading game…</div><div class="card"><h2>🔔 Phone reminders</h2><p class="small">Step 1: allow notifications on this device. Scheduled push reminders will be enabled after delivery testing.</p><button id="notifyBtn" class="submit" type="button">Enable Notifications</button><p id="notifyStatus" class="small"></p></div>
 
 <div class="card">
 <h2 style="margin-top:0">1. Choose your name</h2>
@@ -757,6 +757,7 @@ document.getElementById("matchViewBtn").onclick=()=>showView("match");
 document.getElementById("refreshMatchBtn").onclick=refreshMatchCentre;
 document.getElementById("matchRoundSelect").onchange=refreshMatchCentre;
 document.getElementById("aiViewBtn").onclick=()=>showView("ai");
+document.getElementById("notifyBtn").addEventListener("click",async()=>{const out=document.getElementById("notifyStatus");if(!("Notification" in window)){out.textContent="Notifications are not supported in this browser.";return;}try{const permission=await Notification.requestPermission();out.textContent=permission==="granted"?"Notifications allowed. Push delivery is not configured yet.":permission==="denied"?"Notifications blocked in browser settings.":"Notification permission not granted.";}catch(err){out.textContent="Notification permission failed: "+err.message;}});
 start();
 // Automatic refresh disabled so form inputs can never be redrawn while Joe is typing.
 </script>
