@@ -90,12 +90,12 @@ details.predictionCard[open]>summary::after{transform:rotate(180deg)}
 </style>
 </head>
 <body>
-<header><div class="wrap"><h1>⚽ PL Predict</h1><div class="sub">Monthly battles. One season champion. <span style="opacity:.7">• v10.7</span></div></div></header>
+<header><div class="wrap"><h1>⚽ PL Predict</h1><div class="sub">Monthly battles. One season champion. <span style="opacity:.7">• v10.8</span></div></div></header>
 <div class="wrap">
 
 <div class="viewTabs" id="mainViewTabs">
   <button id="gameViewBtn" class="viewTab active" type="button">⚽ Gameweek</button>
-  <button id="matchViewBtn" class="viewTab" type="button">🔴 Match Centre</button>
+  <button id="matchViewBtn" class="viewTab hidden" type="button">🔴 Match Centre</button>
   <button id="statsViewBtn" class="viewTab" type="button">📊 Stats & Records</button>
   <button id="aiViewBtn" class="viewTab hidden" type="button">🔒 AI Tracker</button>
 </div>
@@ -525,13 +525,14 @@ async function saveResults(){
 function updateAiAccess(){
  const allowed=loggedIn&&me==="Joe";
  document.getElementById("aiViewBtn").classList.toggle("hidden",!allowed);
- document.getElementById("mainViewTabs").style.gridTemplateColumns=allowed?"repeat(4,1fr)":"repeat(3,1fr)";
- if(!allowed && !document.getElementById("aiView").classList.contains("hidden")) showView("game");
+ document.getElementById("matchViewBtn").classList.toggle("hidden",!allowed);
+ document.getElementById("mainViewTabs").style.gridTemplateColumns=allowed?"repeat(4,1fr)":"repeat(2,1fr)";
+ if(!allowed && (!document.getElementById("aiView").classList.contains("hidden") || !document.getElementById("matchView").classList.contains("hidden"))) showView("game");
 }
 function showView(view){
  const ai=view==="ai"&&loggedIn&&me==="Joe";
  const stats=view==="stats";
- const match=view==="match";
+ const match=view==="match"&&loggedIn&&me==="Joe";
  document.getElementById("gameView").classList.toggle("hidden",ai||stats||match);
  document.getElementById("statsView").classList.toggle("hidden",!stats);
  document.getElementById("matchView").classList.toggle("hidden",!match);
