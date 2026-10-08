@@ -90,12 +90,13 @@ details.predictionCard[open]>summary::after{transform:rotate(180deg)}
 </style>
 </head>
 <body>
-<header><div class="wrap"><h1>⚽ PL Predict</h1><div class="sub">Monthly battles. One season champion. <span style="opacity:.7">• v10.5</span></div></div></header>
+<header><div class="wrap"><h1>⚽ PL Predict</h1><div class="sub">Monthly battles. One season champion. <span style="opacity:.7">• v10.6</span></div></div></header>
 <div class="wrap">
 
-<div class="viewTabs">
+<div class="viewTabs" id="mainViewTabs">
   <button id="gameViewBtn" class="viewTab active" type="button">⚽ Gameweek</button>
   <button id="statsViewBtn" class="viewTab" type="button">📊 Stats & Records</button>
+  <button id="aiViewBtn" class="viewTab hidden" type="button">🔒 AI Tracker</button>
 </div>
 
 <div id="gameView">
@@ -167,6 +168,10 @@ details.predictionCard[open]>summary::after{transform:rotate(180deg)}
 
 </div>
 
+<div id="aiView" class="hidden">
+<div class="statsHero"><h2>🔒 Al's AI Tracker</h2><div class="small">Private season-long prediction experiment. Predictions are locked before kickoff.</div></div>
+<div id="aiTrackerContent" class="card"><p class="small">Loading AI statistics…</p></div>
+</div>
 <div id="statsView" class="hidden">
   <div class="statsHero">
     <h2>📊 Stats & Records</h2>
@@ -208,6 +213,7 @@ let pin=sessionStorage.getItem("pl_pin")||"";
 let loggedIn=false;
 let adminDirty=false;
 let statsCache=null;
+let aiTrackerCache=null;
 
 const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const monthLabel=k=>{
@@ -259,6 +265,7 @@ async function choosePlayer(p){
   localStorage.setItem("pl_player",p);
   sessionStorage.removeItem("pl_pin");
   renderPlayers();
+  updateAiAccess();
   document.getElementById("pinBox").classList.remove("hidden");
   document.getElementById("pinTitle").textContent=`Enter ${p}'s 4-digit PIN`;
   document.getElementById("pinInput").value="";
@@ -286,6 +293,7 @@ async function login(useStored=false){
   document.getElementById("loginStatus").innerHTML=`✅ Logged in as <b>${esc(me)}</b>.`;
   await loadOwn();
   await loadAdminResults();
+  updateAiAccess();
 }
 
 function renderTabs(){
@@ -512,13 +520,48 @@ async function saveResults(){
 }
 
 
+function updateAiAccess(){
+ const allowed=loggedIn&&me==="Joe";
+ document.getElementById("aiViewBtn").classList.toggle("hidden",!allowed);
+ document.getElementById("mainViewTabs").style.gridTemplateColumns=allowed?"repeat(3,1fr)":"repeat(2,1fr)";
+ if(!allowed && !document.getElementById("aiView").classList.contains("hidden")) showView("game");
+}
 function showView(view){
-  const gameMode=view==="game";
-  document.getElementById("gameView").classList.toggle("hidden",!gameMode);
-  document.getElementById("statsView").classList.toggle("hidden",gameMode);
-  document.getElementById("gameViewBtn").classList.toggle("active",gameMode);
-  document.getElementById("statsViewBtn").classList.toggle("active",!gameMode);
-  if(!gameMode) refreshStats();
+ const ai=view==="ai"&&loggedIn&&me==="Joe";
+ const stats=view==="stats";
+ document.getElementById("gameView").classList.toggle("hidden",ai||stats);
+ document.getElementById("statsView").classList.toggle("hidden",!stats);
+ document.getElementById("aiView").classList.toggle("hidden",!ai);
+ document.getElementById("gameViewBtn").classList.toggle("active",!ai&&!stats);
+ document.getElementById("statsViewBtn").classList.toggle("active",stats);
+ document.getElementById("aiViewBtn").classList.toggle("active",ai);
+ if(stats)refreshStats();
+ if(ai)refreshAiTracker();
+}
+async function refreshAiTracker(){
+ if(!(loggedIn&&me==="Joe"&&pin))return;
+ const root=document.getElementById("aiTrackerContent");
+ root.innerHTML='<p class="small">Loading AI statistics…</p>';
+ const {data,error}=await sb.rpc("get_ai_tracker_with_pin",{p_player:"Joe",p_pin:pin,p_season_key:SEASON_KEY});
+ if(error){root.innerHTML='<div class="warn">Could not load AI statistics: '+esc(error.message)+'</div>';return;}
+ const d=data||{}, rounds=d.rounds||[];
+ const metrics=[
+ ["🏆 Season points",d.season_points||0],["🎯 Exact scores",d.exact_scores||0],
+ ["✅ Correct results",d.correct_results||0],["📈 Result accuracy",(d.accuracy_pct||0)+"%"],
+ ["🎯 Exact-score rate",(d.exact_pct||0)+"%"],["⚽ Points per fixture",d.avg_points_per_fixture||0],
+ ["🚀 Best round",d.best_round?d.best_round.round_label+" — "+d.best_round.points+" pts":"—"],
+ ["📉 Worst round",d.worst_round?d.worst_round.round_label+" — "+d.worst_round.points+" pts":"—"]
+ ];
+ const score=(p,r)=>{
+ if(!Array.isArray(p)||!Array.isArray(r))return "—";
+ if(Number(p[0])===Number(r[0])&&Number(p[1])===Number(r[1]))return "+16";
+ return Math.sign(Number(p[0])-Number(p[1]))===Math.sign(Number(r[0])-Number(r[1]))?"+6":"+0";
+ };
+ root.innerHTML='<div class="statMiniGrid">'+metrics.map(([k,v])=>'<div class="statMini"><span>'+esc(k)+'</span><b>'+esc(v)+'</b></div>').join('')+'</div>'+
+ '<h3>Round-by-round history</h3>'+
+ (rounds.length?rounds.map(r=>'<details class="fixtureCompare"><summary><b>'+esc(r.round_label||r.game_id)+'</b> — '+Number(r.points||0)+' pts • '+Number(r.completed||0)+' results • '+Number(r.exacts||0)+' exacts</summary>'+
+ '<div class="small" style="margin-top:10px">Locked: '+esc(new Date(r.locked_at).toLocaleString("en-GB"))+'</div>'+
+ (r.fixtures||[]).map((f,i)=>{const p=r.predictions?.[i],v=r.results?.[i];return '<div class="statusRow"><div><b>'+esc(f[0])+' v '+esc(f[1])+'</b><div class="small">Al: '+(Array.isArray(p)?esc(p[0])+'–'+esc(p[1]):'—')+' • Actual: '+(Array.isArray(v)?esc(v[0])+'–'+esc(v[1]):'Pending')+'</div></div><b>'+score(p,v)+'</b></div>'}).join('')+'</details>').join(''):'<p class="small">No AI predictions have been locked yet. The experiment starts with the next eligible round; no historical predictions will be fabricated.</p>');
 }
 
 async function getStatsData(force=false){
@@ -651,6 +694,7 @@ document.getElementById("submitBtn").onclick=submit;
 document.getElementById("saveResultsBtn").onclick=saveResults;
 document.getElementById("gameViewBtn").onclick=()=>showView("game");
 document.getElementById("statsViewBtn").onclick=()=>showView("stats");
+document.getElementById("aiViewBtn").onclick=()=>showView("ai");
 start();
 // Automatic refresh disabled so form inputs can never be redrawn while Joe is typing.
 </script>
