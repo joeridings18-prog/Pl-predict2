@@ -12,7 +12,14 @@ header{background:#d71920;color:#fff;padding:22px 18px}
 .wrap{max-width:820px;margin:auto;padding:16px}
 h1{margin:0;font-size:29px}.sub{opacity:.9;margin-top:5px}
 .card{background:#fff;border-radius:16px;padding:18px;margin:14px 0;box-shadow:0 2px 10px #0001}
-.notice{background:#fff0f0;border-left:5px solid #d71920;padding:13px;border-radius:10px;margin:14px 0}
+.notice{background:#fff0f0;border:1px solid #f4b4b6;border-left:5px solid #d71920;padding:18px;border-radius:14px;margin:14px 0;text-align:center}
+.deadlineTitle{font-size:15px;font-weight:800;letter-spacing:.02em}
+.deadlineClock{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:13px auto;max-width:460px}
+.deadlineUnit{background:white;border:1px solid #f3cbcc;border-radius:12px;padding:11px 4px}
+.deadlineNum{font-size:clamp(26px,7vw,39px);font-weight:900;color:#a10e17;line-height:1.1;font-variant-numeric:tabular-nums}
+.deadlineLabel{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:#666;margin-top:5px}
+.notice.urgent{background:#ffe2e2;border-color:#d71920}
+.notice.urgent .deadlineNum{color:#b00020}
 .weekTabs{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px}
 .weekTabs button,.players button,.pinBtn{border:0;border-radius:10px;padding:11px 15px;background:#eee;cursor:pointer;font-weight:700;white-space:nowrap}
 .weekTabs button.active,.players button.active,.pinBtn,.submit{background:#d71920;color:#fff}
@@ -90,7 +97,7 @@ details.predictionCard[open]>summary::after{transform:rotate(180deg)}
 </style>
 </head>
 <body>
-<header><div class="wrap"><h1>⚽ PL Predict</h1><div class="sub">Monthly battles. One season champion. <span style="opacity:.7">• v11.4</span></div></div></header>
+<header><div class="wrap"><h1>⚽ PL Predict</h1><div class="sub">Monthly battles. One season champion. <span style="opacity:.7">• v11.5</span></div></div></header>
 <div class="wrap">
 
 <div class="viewTabs" id="mainViewTabs">
@@ -698,19 +705,17 @@ async function refreshLeaderboard(){
 }
 
 function updateNotice(){
-  if(!game)return;
-  const reveal=new Date(game.reveal_at);
-  const open=Date.now()<reveal.getTime();
-  const n=document.getElementById("notice");
-  if(open){
-    const diff=reveal-Date.now();
-    const days=Math.floor(diff/86400000),hours=Math.floor((diff%86400000)/3600000),mins=Math.floor((diff%3600000)/60000);
-    n.innerHTML=`🔒 <b>${esc(game.round_label||`MW ${game.gameweek}`)}</b> predictions are hidden until the first kickoff.<br><span class="small">${days?days+"d ":""}${hours}h ${mins}m remaining.</span>`;
-  } else {
-    n.innerHTML=`🎉 <b>${esc(game.round_label||`MW ${game.gameweek}`)}</b> predictions are revealed.`;
-  }
+ if(!game)return;
+ const reveal=new Date(game.reveal_at),diff=Math.max(0,reveal.getTime()-Date.now());
+ const n=document.getElementById("notice");
+ n.classList.toggle("urgent",diff>0&&diff<=7200000);
+ if(diff>0){
+  const days=Math.floor(diff/86400000),hours=Math.floor(diff%86400000/3600000),mins=Math.floor(diff%3600000/60000),secs=Math.floor(diff%60000/1000);
+  const parts=[["Days",days],["Hours",hours],["Mins",mins],["Secs",secs]];
+  n.innerHTML='<div class="deadlineTitle">⏰ '+esc(game.round_label||"Next round")+' — Prediction deadline</div><div class="deadlineClock">'+parts.map(([label,value])=>'<div class="deadlineUnit"><div class="deadlineNum">'+String(value).padStart(2,"0")+'</div><div class="deadlineLabel">'+label+'</div></div>').join("")+'</div><div class="small">'+(diff<=7200000?'🚨 Final 2 hours — submit your predictions!':diff<=86400000?'⚠️ Less than 24 hours remaining':'Predictions lock at the first kickoff')+'</div>';
+ }else n.innerHTML='<div class="deadlineTitle">🔒 '+esc(game.round_label||"This round")+' — Predictions revealed</div><div style="font-size:25px;font-weight:800;margin-top:9px">Deadline passed</div>';
 }
-
+setInterval(()=>{if(!document.hidden&&game)updateNotice();},1000);
 async function refreshAll(){
   updateNotice();
   await Promise.all([refreshSubmissionStatus(),refreshReveal(),refreshLeaderboard()]);
