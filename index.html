@@ -590,7 +590,7 @@ async function refreshStats(force=false){
       <div class="spoonCurrent">${holderText}</div>
       <div class="small" style="margin-bottom:8px">The latest completed round holder keeps the spoon until the next prediction round finishes.</div>
       <div class="spoonRow" style="font-weight:700"><span>Player</span><span>Total</span><span>Current</span><span>Longest</span></div>
-      ${players.map(p=>`<div class="spoonRow">
+      ${[...players].sort((a,b)=>Number(b.wooden_spoons||0)-Number(a.wooden_spoons||0)||Number(b.current_spoon_streak||0)-Number(a.current_spoon_streak||0)||Number(b.longest_spoon_streak||0)-Number(a.longest_spoon_streak||0)||String(a.player).localeCompare(String(b.player))).map(p=>`<div class="spoonRow">
         <b>${esc(p.player)}${holders.has(p.player)?" 🥄":""}</b>
         <span>${p.wooden_spoons}</span>
         <span>${p.current_spoon_streak}</span>
