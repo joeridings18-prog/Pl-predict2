@@ -97,7 +97,7 @@ details.predictionCard[open]>summary::after{transform:rotate(180deg)}
 </style>
 </head>
 <body>
-<header><div class="wrap"><h1>⚽ PL Predict</h1><div class="sub">Monthly battles. One season champion. <span style="opacity:.7">• v11.8</span></div></div></header>
+<header><div class="wrap"><h1>⚽ PL Predict</h1><div class="sub">Monthly battles. One season champion. <span style="opacity:.7">• v11.9</span></div></div></header>
 <div class="wrap">
 
 <div class="viewTabs" id="mainViewTabs">
@@ -580,10 +580,14 @@ async function refreshMatchCentre(silent=false){
  const official=Object.fromEntries((rr.data||[]).map(r=>[Number(r.fixture_index),[Number(r.home_score),Number(r.away_score)]]));
  const picks=Object.fromEntries((pr.data||[]).map(p=>[p.player,p.predictions]));
  const norm=n=>String(n||"").toLowerCase().replace(/\\b(football club|fc|afc)\\b/g,"").replace(/[^a-z0-9]/g,"");
- const aliases={"manchesterunited":"manunited","manchestercity":"mancity","tottenhamhotspur":"tottenham","brightonhovealbion":"brighton","wolverhamptonwanderers":"wolves","queensparkrangers":"qpr","westbromwichalbion":"westbrom","newcastleunited":"newcastle","leedsunited":"leeds","sheffieldunited":"sheffieldunited"};
+ const aliases={"manchesterunited":"manunited","manchestercity":"mancity","tottenhamhotspur":"tottenham","brightonhovealbion":"brighton","wolverhamptonwanderers":"wolves","queensparkrangers":"qpr","westbromwichalbion":"westbrom","newcastleunited":"newcastle","leedsunited":"leeds","westhamunited":"westham","westham":"westham","afcbournemouth":"bournemouth","bournemouth":"bournemouth","ipswichtown":"ipswich","hullcity":"hull","coventrycity":"coventry","bristolcity":"bristolcity","charltonathletic":"charlton","swanseacity":"swansea","norwichcity":"norwich","blackburnrovers":"blackburn","boltonwanderers":"bolton","derbycounty":"derby","lincolncity":"lincoln","stokecity":"stoke","birminghamcity":"birmingham","cardiffcity":"cardiff","prestonnorthend":"preston","sheffieldunited":"sheffieldunited","nottinghamforest":"nottinghamforest"};
  const canonical=n=>{const v=norm(n);return aliases[v]||v;};
  const all=feeds.flatMap(x=>Array.isArray(x.matches)?x.matches:[]);
- const find=f=>all.find(m=>canonical(m.home)===canonical(f[0])&&canonical(m.away)===canonical(f[1])&&Math.abs(new Date(m.utcDate).getTime()-new Date(f[3]||f[2]).getTime())<86400000*3);
+ const find=f=>all.find(m=>{
+  const teamsMatch=(canonical(m.home)===canonical(f[0])||canonical(m.homeShort)===canonical(f[0]))&&(canonical(m.away)===canonical(f[1])||canonical(m.awayShort)===canonical(f[1]));
+  const kick=new Date(f[3]||f[2]).getTime(),feedKick=new Date(m.utcDate).getTime();
+  return teamsMatch&&Number.isFinite(kick)&&Number.isFinite(feedKick)&&Math.abs(feedKick-kick)<86400000*3;
+ });
  const points=Object.fromEntries(PLAYERS.map(p=>[p,0]));
  const calc=(p,r)=>!Array.isArray(p)||!r?0:Number(p[0])===r[0]&&Number(p[1])===r[1]?16:Math.sign(Number(p[0])-Number(p[1]))===Math.sign(r[0]-r[1])?6:0;
  const rows=g.fixtures.map((f,i)=>{const m=find(f),r=official[i],valid=m&&m.homeScore!==null&&m.awayScore!==null,live=valid?[Number(m.homeScore),Number(m.awayScore)]:null;return {f,i,m,r,live,score:r||live,provisional:!r&&!!live};});
@@ -593,8 +597,10 @@ async function refreshMatchCentre(silent=false){
  const seasonTotals=Object.fromEntries((seasonResp.data||[]).map(x=>[x.player,Number(x.points)||0]));
  const combined=p=>(seasonTotals[p]||0)-officialRound[p]+points[p];
  const feedOk=feeds.some(x=>Array.isArray(x.matches));
+ const feedIssues=feeds.map((x,i)=>!Array.isArray(x.matches)?["PL","ELC",...(isCL?["CL"]:[])][i]+": "+(x.error||"unavailable"):"").filter(Boolean);
+ const feedMatches=rows.filter(x=>x.m).length;
  const collapsedBefore=new Set([...root.querySelectorAll("details.fixtureCompare:not([open])")].map(el=>el.dataset.fixture));
- root.innerHTML='<p class="small">'+(feedOk?'⚽ Delayed football scores connected':'⚠️ Football feed unavailable; showing recorded results')+' • '+Object.keys(official).length+'/'+rows.length+' official results • Auto-refresh every 2 minutes while this tab is open • Provisional points never alter the official table.</p>'+
+ root.innerHTML='<p class="small">'+(feedOk?'⚽ Delayed football scores connected':'⚠️ Football feed unavailable; showing recorded results')+' • '+feedMatches+'/'+rows.length+' fixtures matched to feed • '+Object.keys(official).length+'/'+rows.length+' official results • Auto-refresh every 2 minutes while this tab is open • Provisional points never alter the official table.'+(feedIssues.length?' ⚠️ '+esc(feedIssues.join('; ')):'')+'</p>'+
  (revealed?'<h3>🏆 Provisional overall standings</h3><table class="leader"><thead><tr><th>Player</th><th>Round</th><th>Season</th></tr></thead><tbody>'+[...PLAYERS].sort((a,b)=>combined(b)-combined(a)||points[b]-points[a]).map((p,i)=>'<tr><td><b>'+(i+1)+'. '+esc(p)+'</b></td><td>'+points[p]+'</td><td><b>'+combined(p)+'</b></td></tr>').join('')+'</tbody></table>':'<p>🔒 Predictions hidden until reveal.</p>')+
  '<h3>Fixtures</h3><p class="small">Tap a fixture to expand or collapse predictions.</p>'+rows.map(({f,i,m,r,live,score,provisional})=>'<details class="fixtureCompare" data-fixture="'+i+'" '+(collapsedBefore.has(String(i))?'':'open')+'><summary><b>'+esc(f[0])+' v '+esc(f[1])+'</b><div class="small">'+(r?'Final: '+r.join('–'):live?esc(m.status)+': '+live.join('–')+' (delayed)':'Awaiting score')+'</div></summary><div class="small">'+esc(f[2]||'')+(provisional?' • Provisional score':'')+'</div>'+(revealed?'<div class="predGrid">'+PLAYERS.map(p=>{const v=picks[p]?.[i],pts=score&&Array.isArray(v)?calc(v,score):0;return '<div class="predCell '+(pts===16?'exact':pts===6?'correct':'')+'"><b>'+esc(p)+'</b><div class="predScore">'+(Array.isArray(v)?esc(v[0])+'–'+esc(v[1]):'—')+'</div><div class="predPts">'+(score&&Array.isArray(v)?(pts?'✓ +'+pts:'+0'):'')+'</div></div>';}).join('')+'</div>':'<p class="small">Predictions locked until reveal.</p>')+'</details>').join('');
  }finally{matchRefreshInProgress=false;}
