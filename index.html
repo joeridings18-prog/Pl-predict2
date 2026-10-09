@@ -437,7 +437,13 @@ async function refreshReveal(){
     return 0;
   };
 
-  document.getElementById("reveal").innerHTML=game.fixtures.map((f,i)=>{
+  document.getElementById("reveal").innerHTML=game.fixtures.map((f,i)=>({f,i})).sort((a,b)=>{
+    const ta=Date.parse(a.f[3]||""),tb=Date.parse(b.f[3]||"");
+    if(Number.isFinite(ta)&&Number.isFinite(tb))return ta-tb||a.i-b.i;
+    if(Number.isFinite(ta))return -1;
+    if(Number.isFinite(tb))return 1;
+    return a.i-b.i;
+  }).map(({f,i})=>{
     const res=resultMap[i];
     const cells=PLAYERS.map(p=>{
       const pred=predMap[p]?.[i];
