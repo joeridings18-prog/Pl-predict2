@@ -712,13 +712,21 @@ async function refreshLeaderboard(){
 
 function updateNotice(){
  if(!game)return;
- const reveal=new Date(game.reveal_at),diff=Math.max(0,reveal.getTime()-Date.now());
+ const now=Date.now();
+ const currentDeadline=new Date(game.reveal_at).getTime();
+ const latestKickoff=Math.max(...(game.fixtures||[]).map(f=>new Date(f[3]).getTime()).filter(Number.isFinite),currentDeadline);
+ const roundFinished=now>=latestKickoff+3*3600000;
+ const nextRound=games.filter(g=>new Date(g.reveal_at).getTime()>now).sort((a,b)=>new Date(a.reveal_at)-new Date(b.reveal_at))[0];
+ const countdownGame=now<currentDeadline?game:roundFinished?nextRound:null;
  const n=document.getElementById("notice");
+ if(!countdownGame){n.classList.add("hidden");return;}
+ n.classList.remove("hidden");
+ const reveal=new Date(countdownGame.reveal_at),diff=Math.max(0,reveal.getTime()-now);
  n.classList.toggle("urgent",diff>0&&diff<=7200000);
  if(diff>0){
   const days=Math.floor(diff/86400000),hours=Math.floor(diff%86400000/3600000),mins=Math.floor(diff%3600000/60000),secs=Math.floor(diff%60000/1000);
   const parts=[["Days",days],["Hours",hours],["Mins",mins],["Secs",secs]];
-  n.innerHTML='<div class="deadlineTitle">⏰ '+esc(game.round_label||"Next round")+' — Prediction deadline</div><div class="deadlineClock">'+parts.map(([label,value])=>'<div class="deadlineUnit"><div class="deadlineNum">'+String(value).padStart(2,"0")+'</div><div class="deadlineLabel">'+label+'</div></div>').join("")+'</div><div class="small">'+(diff<=7200000?'🚨 Final 2 hours — submit your predictions!':diff<=86400000?'⚠️ Less than 24 hours remaining':'Predictions lock at the first kickoff')+'</div>';
+  n.innerHTML='<div class="deadlineTitle">⏰ '+esc(countdownGame.round_label||"Next round")+' — Prediction deadline</div><div class="deadlineClock">'+parts.map(([label,value])=>'<div class="deadlineUnit"><div class="deadlineNum">'+String(value).padStart(2,"0")+'</div><div class="deadlineLabel">'+label+'</div></div>').join("")+'</div><div class="small">'+(diff<=7200000?'🚨 Final 2 hours — submit your predictions!':diff<=86400000?'⚠️ Less than 24 hours remaining':'Predictions lock at the first kickoff')+'</div>';
  }else n.innerHTML='<div class="deadlineTitle">🔒 '+esc(game.round_label||"This round")+' — Predictions revealed</div><div style="font-size:25px;font-weight:800;margin-top:9px">Deadline passed</div>';
 }
 setInterval(()=>{if(!document.hidden&&game)updateNotice();},1000);
