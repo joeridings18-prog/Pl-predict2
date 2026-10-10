@@ -103,6 +103,9 @@ details.predictionCard[open]>summary::after{transform:rotate(180deg)}
 @media(max-width:420px){.roundPickerTop h2{font-size:18px}.roundPickerCard{padding:16px}.roundPickerTop .pill{font-size:11px}}
 .roundPickerEmbedded{padding:2px 0 16px;margin-bottom:10px;border-bottom:1px solid #eee}
 .roundPickerEmbedded .roundPickerTop strong{font-size:16px}
+.betRow{padding:12px 0;border-bottom:1px solid #eee;line-height:1.6}.betRow:last-child{border-bottom:0}
+.viewTabs{grid-template-columns:repeat(2,minmax(0,1fr))}.viewTab{white-space:normal;font-size:13px}
+@media(max-width:520px){.viewTabs{display:flex;overflow-x:auto}.viewTab{min-width:135px;flex:0 0 auto}}
 </style>
 </head>
 <body>
@@ -114,6 +117,7 @@ details.predictionCard[open]>summary::after{transform:rotate(180deg)}
   <button id="matchViewBtn" class="viewTab hidden" type="button">⚽ Predictions Hub</button>
   <button id="statsViewBtn" class="viewTab" type="button">📊 Stats & Records</button>
   <button id="aiViewBtn" class="viewTab hidden" type="button">🔒 AI Tracker</button>
+  <button id="betViewBtn" class="viewTab hidden" type="button">💷 Virtual Betting</button>
 </div>
 
 <div id="gameView">
@@ -185,6 +189,7 @@ details.predictionCard[open]>summary::after{transform:rotate(180deg)}
 </div>
 
 <div id="matchView" class="hidden"><div class="statsHero"><h2>⚽ Predictions Hub</h2><div class="small">All predictions, live and final scores, provisional standings and previous rounds in one place.</div></div><div class="card"><div class="gwNav"><select id="matchRoundSelect" aria-label="Predictions Hub round" style="width:100%;padding:12px"></select></div><button class="submit" id="refreshMatchBtn" type="button">↻ Refresh Predictions Hub</button><div id="matchContent" style="margin-top:14px">Choose a round to see matches.</div></div></div>
+<div id="betView" class="hidden"><div class="statsHero"><h2>💷 Virtual Betting Tracker</h2><div class="small">Private £10-per-correct-score simulation. No real bets.</div></div><div id="betContent" class="card"><p class="small">Loading virtual results…</p></div></div>
 <div id="aiView" class="hidden">
 <div class="statsHero"><h2>🔒 Al's AI Tracker</h2><div class="small">Private season-long prediction experiment. Predictions are locked before kickoff.</div></div>
 <div id="aiTrackerContent" class="card"><p class="small">Loading AI statistics…</p></div>
@@ -557,29 +562,50 @@ async function saveResults(){
 function updateAiAccess(){
  const allowed=loggedIn&&me==="Joe";
  document.getElementById("aiViewBtn").classList.toggle("hidden",!allowed);
+ document.getElementById("betViewBtn").classList.toggle("hidden",!allowed);
  document.getElementById("matchViewBtn").classList.toggle("hidden",!loggedIn);
- document.getElementById("mainViewTabs").style.gridTemplateColumns=allowed?"repeat(4,1fr)":loggedIn?"repeat(3,1fr)":"repeat(2,1fr)";
- if(!allowed && !document.getElementById("aiView").classList.contains("hidden")) showView("game");
+ document.getElementById("mainViewTabs").style.gridTemplateColumns=allowed?"repeat(5,1fr)":loggedIn?"repeat(3,1fr)":"repeat(2,1fr)";
+ if(!allowed && (!document.getElementById("aiView").classList.contains("hidden")||!document.getElementById("betView").classList.contains("hidden"))) showView("game");
  if(!loggedIn && !document.getElementById("matchView").classList.contains("hidden")) showView("game");
 }
 let matchAutoTimer=null;
 function showView(view){
  if(matchAutoTimer){clearInterval(matchAutoTimer);matchAutoTimer=null;}
  const ai=view==="ai"&&loggedIn&&me==="Joe";
+ const bet=view==="bet"&&loggedIn&&me==="Joe";
  const stats=view==="stats";
  const match=view==="match"&&loggedIn;
- document.getElementById("gameView").classList.toggle("hidden",ai||stats||match);
+ document.getElementById("gameView").classList.toggle("hidden",ai||stats||match||bet);
  document.getElementById("statsView").classList.toggle("hidden",!stats);
  document.getElementById("matchView").classList.toggle("hidden",!match);
  document.getElementById("aiView").classList.toggle("hidden",!ai);
- document.getElementById("gameViewBtn").classList.toggle("active",!ai&&!stats&&!match);
+ document.getElementById("betView").classList.toggle("hidden",!bet);
+ document.getElementById("gameViewBtn").classList.toggle("active",!ai&&!stats&&!match&&!bet);
  document.getElementById("statsViewBtn").classList.toggle("active",stats);
  document.getElementById("aiViewBtn").classList.toggle("active",ai);
  document.getElementById("matchViewBtn").classList.toggle("active",match);
+ document.getElementById("betViewBtn").classList.toggle("active",bet);
  if(stats)refreshStats();
  if(ai)refreshAiTracker();
+ if(bet)refreshVirtualBetting();
  if(match){refreshMatchCentre();matchAutoTimer=setInterval(()=>{if(!document.hidden&&loggedIn&&!document.getElementById("matchView").classList.contains("hidden"))refreshMatchCentre(true);},120000);}
 }
+async function refreshVirtualBetting(){
+ const root=document.getElementById("betContent");
+ if(!(loggedIn&&me==="Joe"&&pin))return;
+ root.innerHTML='<p class="small">Loading virtual betting records…</p>';
+ const {data,error}=await sb.rpc("get_virtual_betting_with_pin",{p_player:"Joe",p_pin:pin,p_season_key:SEASON_KEY});
+ if(error){root.innerHTML='<div class="warn">Could not load virtual tracker: '+esc(error.message)+'</div>';return;}
+ const rows=data?.rows||[],totals=Object.fromEntries(PLAYERS.map(p=>[p,{stake:0,returns:0,wins:0,priced:0}]));
+ const money=n=>'£'+Number(n).toFixed(2);
+ for(const r of rows){if(r.odds==null||!Array.isArray(r.actual))continue;const t=totals[r.player];t.stake+=10;t.priced++;if(Number(r.prediction[0])===Number(r.actual[0])&&Number(r.prediction[1])===Number(r.actual[1])){t.wins++;t.returns+=10*Number(r.odds);}}
+ root.innerHTML='<p class="small">£10 virtual stake per priced prediction. Only finished matches with recorded pre-match odds are settled. Missing odds are excluded, not treated as losses.</p>'+
+ '<div style="overflow-x:auto"><table class="leader"><thead><tr><th>Player</th><th>Staked</th><th>Returns</th><th>Profit / loss</th></tr></thead><tbody>'+
+ [...PLAYERS].sort((a,b)=>(totals[b].returns-totals[b].stake)-(totals[a].returns-totals[a].stake)).map(p=>{const t=totals[p];return '<tr><td><b>'+esc(p)+'</b><div class="small">'+t.wins+' wins / '+t.priced+' settled</div></td><td>'+money(t.stake)+'</td><td>'+money(t.returns)+'</td><td style="font-weight:800;color:'+(t.returns-t.stake>=0?'#287c3e':'#c1272d')+'">'+(t.returns-t.stake>=0?'+':'')+money(t.returns-t.stake)+'</td></tr>';}).join('')+'</tbody></table></div>'+
+ '<div class="warn">Automatic correct-score odds are not connected yet. Unpriced predictions are shown below, but no virtual winnings or losses will be invented.</div>'+
+ '<h3>📋 Prediction ledger</h3><div class="betLedger">'+rows.slice().reverse().map(r=>{const pred=Array.isArray(r.prediction)?r.prediction.join('–'):'—',actual=Array.isArray(r.actual)?r.actual.join('–'):'Not finished',priced=r.odds!=null,finished=Array.isArray(r.actual),win=finished&&priced&&r.prediction[0]===r.actual[0]&&r.prediction[1]===r.actual[1];return '<div class="betRow"><b>'+esc(r.player)+'</b> · '+esc(r.round)+'<div>'+esc(r.home)+' v '+esc(r.away)+'</div><div class="small">Pick '+esc(pred)+' · Result '+esc(actual)+' · '+(priced?'Odds '+Number(r.odds).toFixed(2)+' ('+esc(r.bookmaker)+')':'Odds unavailable')+(priced&&finished?' · '+(win?'Won '+money(10*Number(r.odds)):'Lost £10'):'')+'</div></div>';}).join('')+'</div>';
+}
+
 let matchRefreshInProgress=false;
 async function refreshMatchCentre(silent=false){
  if(matchRefreshInProgress)return;
@@ -795,6 +821,7 @@ document.getElementById("matchViewBtn").onclick=()=>showView("match");
 document.getElementById("refreshMatchBtn").onclick=refreshMatchCentre;
 document.getElementById("matchRoundSelect").onchange=refreshMatchCentre;
 document.getElementById("aiViewBtn").onclick=()=>showView("ai");
+document.getElementById("betViewBtn").onclick=()=>showView("bet");
 document.getElementById("notifyBtn").addEventListener("click",async()=>{const out=document.getElementById("notifyStatus");if(!("Notification" in window)){out.textContent="Notifications are not supported in this browser.";return;}try{const permission=await Notification.requestPermission();out.textContent=permission==="granted"?"Notifications allowed. Push delivery is not configured yet.":permission==="denied"?"Notifications blocked in browser settings.":"Notification permission not granted.";}catch(err){out.textContent="Notification permission failed: "+err.message;}});
 document.getElementById("testNotifyBtn").addEventListener("click",async()=>{const out=document.getElementById("notifyStatus");try{if(!("serviceWorker" in navigator)||!("Notification" in window))throw Error("Notifications are not supported on this browser.");if(Notification.permission!=="granted")throw Error("Tap Enable Notifications first.");const reg=await navigator.serviceWorker.register("./sw.js",{scope:"./"});await navigator.serviceWorker.ready;await reg.showNotification("PL Predict test ⚽",{body:"Great! Notifications are working on this device.",tag:"pl-test",data:{url:"./"}});out.textContent="✅ Test notification requested. Check your Android notification panel.";}catch(err){out.textContent="⚠️ "+err.message;}});
 const VAPID_PUBLIC="BBXjfdKCoI2Yu7t_Who8CnVy_SIWs62JTJjm20k_FbayozSc2LadnZ6YMca2GRiuE2tq_AB5fKtInd120ockUd4";
