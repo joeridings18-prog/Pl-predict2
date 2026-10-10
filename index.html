@@ -607,7 +607,7 @@ async function refreshMatchCentre(silent=false){
  const points=Object.fromEntries(PLAYERS.map(p=>[p,0]));
  const calc=(p,r)=>!Array.isArray(p)||!r?0:Number(p[0])===r[0]&&Number(p[1])===r[1]?16:Math.sign(Number(p[0])-Number(p[1]))===Math.sign(r[0]-r[1])?6:0;
  const rows=g.fixtures.map((f,i)=>{const m=find(f),r=official[i],valid=m&&m.homeScore!==null&&m.awayScore!==null&&Number.isFinite(Number(m.homeScore))&&Number.isFinite(Number(m.awayScore)),live=valid?[Number(m.homeScore),Number(m.awayScore)]:null;return {f,i,m,r,live,score:r||live,provisional:!r&&!!live};});
- rows.sort((a,b)=>{const ta=Date.parse(a.f[3]||""),tb=Date.parse(b.f[3]||"");if(Number.isFinite(ta)&&Number.isFinite(tb))return ta-tb||a.i-b.i;if(Number.isFinite(ta))return -1;if(Number.isFinite(tb))return 1;return a.i-b.i;});
+ rows.sort((a,b)=>{const finished=x=>x.m?.status==="FINISHED"||(!!x.r&&!x.m)||(!!x.r&&x.m?.status!=="IN_PLAY"&&x.m?.status!=="LIVE"&&x.m?.status!=="PAUSED");const af=finished(a),bf=finished(b);if(af!==bf)return af?1:-1;const ta=Date.parse(a.f[3]||""),tb=Date.parse(b.f[3]||"");if(Number.isFinite(ta)&&Number.isFinite(tb))return ta-tb||a.i-b.i;if(Number.isFinite(ta))return -1;if(Number.isFinite(tb))return 1;return a.i-b.i;});
  for(const row of rows)if(row.score)for(const p of PLAYERS)points[p]+=calc(picks[p]?.[row.i],row.score);
  const officialRound=Object.fromEntries(PLAYERS.map(p=>[p,0]));
  for(const row of rows)if(row.r)for(const p of PLAYERS)officialRound[p]+=calc(picks[p]?.[row.i],row.r);
