@@ -102,7 +102,7 @@ details.predictionCard[open]>summary::after{transform:rotate(180deg)}
 
 <div class="viewTabs" id="mainViewTabs">
   <button id="gameViewBtn" class="viewTab active" type="button">⚽ Gameweek</button>
-  <button id="matchViewBtn" class="viewTab hidden" type="button">🔴 Match Centre</button>
+  <button id="matchViewBtn" class="viewTab hidden" type="button">⚽ Predictions Hub</button>
   <button id="statsViewBtn" class="viewTab" type="button">📊 Stats & Records</button>
   <button id="aiViewBtn" class="viewTab hidden" type="button">🔒 AI Tracker</button>
 </div>
@@ -160,10 +160,7 @@ details.predictionCard[open]>summary::after{transform:rotate(180deg)}
 </div>
 </details>
 
-<div class="card">
-<h2 style="margin-top:0">👀 Predictions</h2>
-<div id="reveal"></div>
-</div>
+
 
 <div id="adminCard" class="card hidden">
 <div class="sectionHead">
@@ -180,7 +177,7 @@ details.predictionCard[open]>summary::after{transform:rotate(180deg)}
 
 </div>
 
-<div id="matchView" class="hidden"><div class="statsHero"><h2>🔴 Match Centre</h2><div class="small">Scores and provisional points from recorded results. Automatic score feed coming next.</div></div><div class="card"><div class="gwNav"><select id="matchRoundSelect" aria-label="Match centre round" style="width:100%;padding:12px"></select></div><button class="submit" id="refreshMatchBtn" type="button">↻ Refresh Match Centre</button><div id="matchContent" style="margin-top:14px">Choose a round to see matches.</div></div></div>
+<div id="matchView" class="hidden"><div class="statsHero"><h2>⚽ Predictions Hub</h2><div class="small">All predictions, live and final scores, provisional standings and previous rounds in one place.</div></div><div class="card"><div class="gwNav"><select id="matchRoundSelect" aria-label="Predictions Hub round" style="width:100%;padding:12px"></select></div><button class="submit" id="refreshMatchBtn" type="button">↻ Refresh Predictions Hub</button><div id="matchContent" style="margin-top:14px">Choose a round to see matches.</div></div></div>
 <div id="aiView" class="hidden">
 <div class="statsHero"><h2>🔒 Al's AI Tracker</h2><div class="small">Private season-long prediction experiment. Predictions are locked before kickoff.</div></div>
 <div id="aiTrackerContent" class="card"><p class="small">Loading AI statistics…</p></div>
@@ -416,7 +413,7 @@ async function refreshSubmissionStatus(){
 }
 
 async function refreshReveal(){
-  if(!game)return;
+  if(!game || !document.getElementById("reveal"))return;
   const revealed=Date.now()>=new Date(game.reveal_at).getTime();
   if(!revealed){
     document.getElementById("reveal").innerHTML="<p>Nothing is visible yet.</p>";return;
@@ -553,16 +550,17 @@ async function saveResults(){
 function updateAiAccess(){
  const allowed=loggedIn&&me==="Joe";
  document.getElementById("aiViewBtn").classList.toggle("hidden",!allowed);
- document.getElementById("matchViewBtn").classList.toggle("hidden",!allowed);
- document.getElementById("mainViewTabs").style.gridTemplateColumns=allowed?"repeat(4,1fr)":"repeat(2,1fr)";
- if(!allowed && (!document.getElementById("aiView").classList.contains("hidden") || !document.getElementById("matchView").classList.contains("hidden"))) showView("game");
+ document.getElementById("matchViewBtn").classList.toggle("hidden",!loggedIn);
+ document.getElementById("mainViewTabs").style.gridTemplateColumns=allowed?"repeat(4,1fr)":loggedIn?"repeat(3,1fr)":"repeat(2,1fr)";
+ if(!allowed && !document.getElementById("aiView").classList.contains("hidden")) showView("game");
+ if(!loggedIn && !document.getElementById("matchView").classList.contains("hidden")) showView("game");
 }
 let matchAutoTimer=null;
 function showView(view){
  if(matchAutoTimer){clearInterval(matchAutoTimer);matchAutoTimer=null;}
  const ai=view==="ai"&&loggedIn&&me==="Joe";
  const stats=view==="stats";
- const match=view==="match"&&loggedIn&&me==="Joe";
+ const match=view==="match"&&loggedIn;
  document.getElementById("gameView").classList.toggle("hidden",ai||stats||match);
  document.getElementById("statsView").classList.toggle("hidden",!stats);
  document.getElementById("matchView").classList.toggle("hidden",!match);
@@ -573,7 +571,7 @@ function showView(view){
  document.getElementById("matchViewBtn").classList.toggle("active",match);
  if(stats)refreshStats();
  if(ai)refreshAiTracker();
- if(match){refreshMatchCentre();matchAutoTimer=setInterval(()=>{if(!document.hidden&&loggedIn&&me==="Joe"&&!document.getElementById("matchView").classList.contains("hidden"))refreshMatchCentre(true);},120000);}
+ if(match){refreshMatchCentre();matchAutoTimer=setInterval(()=>{if(!document.hidden&&loggedIn&&!document.getElementById("matchView").classList.contains("hidden"))refreshMatchCentre(true);},120000);}
 }
 let matchRefreshInProgress=false;
 async function refreshMatchCentre(silent=false){
@@ -581,7 +579,7 @@ async function refreshMatchCentre(silent=false){
  matchRefreshInProgress=true;
  try{
  const select=document.getElementById("matchRoundSelect"),root=document.getElementById("matchContent");
- if(!(loggedIn&&me==="Joe"))return;
+ if(!loggedIn)return;
  if(!games.length){root.textContent="No rounds loaded.";return;}
  const previous=select.value||game?.id;
  select.innerHTML=games.map(g=>'<option value="'+esc(g.id)+'">'+esc(g.round_label||g.gameweek)+'</option>').join('');
