@@ -593,7 +593,7 @@ async function refreshMatchCentre(silent=false){
  if(rr.error||pr.error){root.innerHTML='<div class="warn">Could not load match data.</div>';return;}
  const official=Object.fromEntries((rr.data||[]).map(r=>[Number(r.fixture_index),[Number(r.home_score),Number(r.away_score)]]));
  const picks=Object.fromEntries((pr.data||[]).map(p=>[p.player,p.predictions]));
- const norm=n=>String(n||"").toLowerCase().replace(/\\b(football club|fc|afc)\\b/g,"").replace(/[^a-z0-9]/g,"");
+ const norm=n=>String(n||"").toLowerCase().replace(/\b(football club|fc|afc)\b/g,"").replace(/[^a-z0-9]/g,"");
  const aliases={"manchesterunited":"manunited","manchestercity":"mancity","tottenhamhotspur":"tottenham","brightonhovealbion":"brighton","wolverhamptonwanderers":"wolves","queensparkrangers":"qpr","westbromwichalbion":"westbrom","newcastleunited":"newcastle","leedsunited":"leeds","westhamunited":"westham","westham":"westham","afcbournemouth":"bournemouth","bournemouth":"bournemouth","ipswichtown":"ipswich","hullcity":"hull","coventrycity":"coventry","bristolcity":"bristolcity","charltonathletic":"charlton","swanseacity":"swansea","norwichcity":"norwich","blackburnrovers":"blackburn","boltonwanderers":"bolton","derbycounty":"derby","lincolncity":"lincoln","stokecity":"stoke","birminghamcity":"birmingham","cardiffcity":"cardiff","prestonnorthend":"preston","sheffieldunited":"sheffieldunited","nottinghamforest":"nottinghamforest"};
  const canonical=n=>{const v=norm(n);return aliases[v]||v;};
  const all=feeds.flatMap(x=>Array.isArray(x.matches)?x.matches:[]);
