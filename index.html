@@ -588,7 +588,9 @@ async function refreshMatchCentre(silent=false){
  if(!silent)root.innerHTML='<p class="small">Loading delayed scores…</p>';
  const revealed=Date.now()>=new Date(g.reveal_at).getTime();
  const isCL=g.competition==="UCL";
- const requests=["PL","ELC",...(isCL?["CL"]:[])].map(c=>fetch("https://ekbwbibmicqfrompglyq.supabase.co/functions/v1/football-scores?competition="+c).then(r=>r.json()).catch(()=>({error:true})));
+ const kickTimes=(g.fixtures||[]).map(f=>Date.parse(f[3]||"")).filter(Number.isFinite);
+ const dateQuery=kickTimes.length?"&dateFrom="+new Date(Math.min(...kickTimes)-86400000).toISOString().slice(0,10)+"&dateTo="+new Date(Math.max(...kickTimes)+86400000).toISOString().slice(0,10):"";
+ const requests=["PL","ELC",...(isCL?["CL"]:[])].map(c=>fetch("https://ekbwbibmicqfrompglyq.supabase.co/functions/v1/football-scores?competition="+c+dateQuery).then(r=>r.json()).catch(()=>({error:true})));
  const [rr,pr,seasonResp,...feeds]=await Promise.all([sb.rpc("get_game_results",{p_game_id:g.id}),revealed?sb.rpc("revealed_predictions",{p_game_id:g.id}):Promise.resolve({data:[]}),sb.rpc("pl_leaderboard",{p_month_key:null,p_season_key:SEASON_KEY}),...requests]);
  if(rr.error||pr.error){root.innerHTML='<div class="warn">Could not load match data.</div>';return;}
  const official=Object.fromEntries((rr.data||[]).map(r=>[Number(r.fixture_index),[Number(r.home_score),Number(r.away_score)]]));
