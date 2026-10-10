@@ -484,7 +484,13 @@ async function loadAdminResults(force=false){
   const {data}=await sb.rpc("get_game_results",{p_game_id:game.id});
   const map=Object.fromEntries((data||[]).map(r=>[r.fixture_index,[r.home_score,r.away_score]]));
 
-  document.getElementById("adminResults").innerHTML=game.fixtures.map((f,i)=>`<div class="match">
+  document.getElementById("adminResults").innerHTML=game.fixtures.map((f,i)=>({f,i})).sort((a,b)=>{
+    const ta=Date.parse(a.f[3]||""),tb=Date.parse(b.f[3]||"");
+    if(Number.isFinite(ta)&&Number.isFinite(tb))return ta-tb||a.i-b.i;
+    if(Number.isFinite(ta))return -1;
+    if(Number.isFinite(tb))return 1;
+    return a.i-b.i;
+  }).map(({f,i})=>`<div class="match">
     <div><div class="teams">${esc(f[0])} v ${esc(f[1])}</div><div class="kick">${esc(f[2])}</div></div>
     <div class="score">
       <input class="adminScore" id="rh${i}" type="number" min="0" max="20" value="${map[i]?.[0]??''}">
