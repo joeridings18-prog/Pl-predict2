@@ -101,6 +101,8 @@ details.predictionCard[open]>summary::after{transform:rotate(180deg)}
 .roundPickerLabel{display:block;font-size:13px;font-weight:700;color:#555;margin:17px 0 7px}
 .roundPickerSelect{display:block;width:100%;padding:13px 14px;border-radius:11px;border:1px solid #d1d5db;background:#fafafa;color:#222;font-size:16px;font-weight:700}
 @media(max-width:420px){.roundPickerTop h2{font-size:18px}.roundPickerCard{padding:16px}.roundPickerTop .pill{font-size:11px}}
+.roundPickerEmbedded{padding:2px 0 16px;margin-bottom:10px;border-bottom:1px solid #eee}
+.roundPickerEmbedded .roundPickerTop strong{font-size:16px}
 </style>
 </head>
 <body>
@@ -128,12 +130,6 @@ details.predictionCard[open]>summary::after{transform:rotate(180deg)}
 <p class="small">The monthly column automatically starts from zero for each new month. Season points keep accumulating across 2026/27.</p>
 </div>
 
-<div class="card roundPickerCard">
-  <div class="roundPickerTop"><div><div class="roundPickerEyebrow">CURRENT SELECTION</div><h2 style="margin:5px 0 0">⚽ Prediction Round</h2></div><span id="monthPill" class="pill"></span></div>
-  <label for="gameweekSelect" class="roundPickerLabel">Choose a round</label>
-  <select id="gameweekSelect" aria-label="Choose gameweek" class="roundPickerSelect"></select>
-</div>
-
 <div id="notice" class="notice">Loading game…</div><div class="card"><h2>🔔 Phone reminders</h2><p class="small">Step 1: allow notifications on this device. Scheduled push reminders will be enabled after delivery testing.</p><button id="notifyBtn" class="submit" type="button">Enable Notifications</button><p id="notifyStatus" class="small"></p><button id="subscribePushBtn" class="submit" type="button" style="margin-top:8px">📲 Register This Phone</button><button id="testNotifyBtn" class="submit" type="button" style="margin-top:8px">🧪 Send Test Notification</button></div>
 
 <div class="card">
@@ -153,6 +149,11 @@ details.predictionCard[open]>summary::after{transform:rotate(180deg)}
 <details id="predictionDetails" class="predictionCard" open>
 <summary><h2>2. Enter your predictions</h2></summary>
 <div class="predictionInner">
+  <div class="roundPickerEmbedded">
+    <div class="roundPickerTop"><strong>⚽ Prediction Round</strong><span id="monthPill" class="pill"></span></div>
+    <label for="gameweekSelect" class="roundPickerLabel">Choose a round</label>
+    <select id="gameweekSelect" aria-label="Choose gameweek" class="roundPickerSelect"></select>
+  </div>
   <div id="fixtures"></div>
   <button class="submit" id="submitBtn">🔒 Submit & Lock Predictions</button>
   <div id="status"></div>
