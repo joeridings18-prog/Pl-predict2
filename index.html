@@ -590,20 +590,41 @@ function showView(view){
  if(bet)refreshVirtualBetting();
  if(match){refreshMatchCentre();matchAutoTimer=setInterval(()=>{if(!document.hidden&&loggedIn&&!document.getElementById("matchView").classList.contains("hidden"))refreshMatchCentre(true);},120000);}
 }
+let virtualBetRows=[];
+let virtualBetRound="";
+function renderVirtualBetting(){
+ const root=document.getElementById("betContent");
+ const rows=virtualBetRows;
+ const money=n=>'£'+Math.abs(Number(n)).toFixed(2);
+ const signed=n=>(n>=0?'+':'−')+money(n);
+ const totals=Object.fromEntries(PLAYERS.map(p=>[p,{stake:0,returns:0,wins:0,priced:0}]));
+ for(const r of rows){if(r.odds==null||!Array.isArray(r.actual))continue;const t=totals[r.player];if(!t)continue;t.stake+=10;t.priced++;if(Number(r.prediction?.[0])===Number(r.actual[0])&&Number(r.prediction?.[1])===Number(r.actual[1])){t.wins++;t.returns+=10*Number(r.odds);}}
+ const roundNames=[...new Set(rows.map(r=>r.round).filter(Boolean))];
+ const roundGames=roundNames.map(name=>({name,game:games.find(g=>(g.round_label||g.gameweek)===name)}));
+ roundGames.sort((a,b)=>(Date.parse(b.game?.reveal_at||0)||0)-(Date.parse(a.game?.reveal_at||0)||0));
+ if(!roundGames.some(g=>g.name===virtualBetRound))virtualBetRound=roundGames[0]?.name||"";
+ const selected=rows.filter(r=>r.round===virtualBetRound);
+ const matches=new Map();
+ for(const r of selected){const key=r.game_id+":"+r.fixture_index;if(!matches.has(key))matches.set(key,{key,home:r.home,away:r.away,actual:r.actual,index:Number(r.fixture_index),game:games.find(g=>g.id===r.game_id),players:[]});matches.get(key).players.push(r);}
+ const matchList=[...matches.values()].sort((a,b)=>{const af=Array.isArray(a.actual),bf=Array.isArray(b.actual);if(af!==bf)return af?1:-1;const at=Date.parse(a.game?.fixtures?.[a.index]?.[3]||""),bt=Date.parse(b.game?.fixtures?.[b.index]?.[3]||"");return (Number.isFinite(at)?at:Infinity)-(Number.isFinite(bt)?bt:Infinity)||a.index-b.index;});
+ const roundTotals=Object.fromEntries(PLAYERS.map(p=>[p,0]));
+ for(const r of selected){if(r.odds==null||!Array.isArray(r.actual))continue;roundTotals[r.player]+=(Number(r.prediction?.[0])===Number(r.actual[0])&&Number(r.prediction?.[1])===Number(r.actual[1])?10*Number(r.odds):0)-10;}
+ const table='<div style="overflow-x:auto"><table class="leader"><thead><tr><th>Player</th><th>Staked</th><th>Returns</th><th>Profit / loss</th></tr></thead><tbody>'+[...PLAYERS].sort((a,b)=>(totals[b].returns-totals[b].stake)-(totals[a].returns-totals[a].stake)).map(p=>{const t=totals[p],net=t.returns-t.stake;return '<tr><td><b>'+esc(p)+'</b><div class="small">'+t.wins+' wins · '+t.priced+' settled</div></td><td>'+money(t.stake)+'</td><td>'+money(t.returns)+'</td><td style="font-weight:800;color:'+(net>=0?'#287c3e':'#c1272d')+'">'+signed(net)+'</td></tr>';}).join('')+'</tbody></table></div>';
+ root.innerHTML='<p class="small">£10 per prediction with verified odds. Unpriced matches are excluded from profit and loss.</p><h3>🏆 Season totals</h3>'+table+
+ '<div class="roundPickerCard" style="margin-top:22px"><label class="roundPickerLabel" for="virtualBetRoundSelect">Choose gameweek</label><select id="virtualBetRoundSelect" class="roundPickerSelect">'+roundGames.map(g=>'<option value="'+esc(g.name)+'" '+(g.name===virtualBetRound?'selected':'')+'>'+esc(g.name)+'</option>').join('')+'</select></div>'+
+ '<h3 style="margin-top:20px">⚽ '+esc(virtualBetRound)+' · Match-by-match</h3>'+
+ '<div class="small" style="margin-bottom:12px">Week profit / loss: '+PLAYERS.map(p=>esc(p)+' <b style="color:'+(roundTotals[p]>=0?'#287c3e':'#c1272d')+'">'+signed(roundTotals[p])+'</b>').join(' · ')+'</div>'+
+ (matchList.length?matchList.map(m=>{const played=Array.isArray(m.actual);const kickoff=m.game?.fixtures?.[m.index]?.[2]||"";return '<div class="card" style="margin:12px 0;padding:14px;border:1px solid #e8e8e8;box-shadow:none"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><b>'+esc(m.home)+' vs '+esc(m.away)+'</b><b style="color:'+(played?'#222':'#777')+'">'+(played?esc(m.actual.join('–')):'Upcoming')+'</b></div><div class="small" style="margin:5px 0 12px">'+esc(kickoff)+'</div><div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px">'+PLAYERS.map(p=>{const r=m.players.find(x=>x.player===p);if(!r)return '<div class="betPick"><b>'+esc(p)+'</b><div class="small">No prediction</div></div>';const pred=Array.isArray(r.prediction)?r.prediction.join('–'):'—',priced=r.odds!=null,won=played&&priced&&Number(r.prediction?.[0])===Number(r.actual[0])&&Number(r.prediction?.[1])===Number(r.actual[1]);const net=played&&priced?(won?10*Number(r.odds)-10:-10):null;return '<div class="betPick" style="padding:11px;border:1px solid '+(won?'#a8d9b0':'#e5e5e5')+';background:'+(won?'#f0faf1':'#fafafa')+';border-radius:12px;min-width:0"><b>'+esc(p)+'</b><div style="font-size:19px;font-weight:800;margin:4px 0">'+esc(pred)+'</div><div class="small">'+(priced?'Odds '+Number(r.odds).toFixed(2):'Odds pending')+'</div><div style="font-weight:800;margin-top:5px;color:'+(net===null?'#777':net>=0?'#287c3e':'#c1272d')+'">'+(net===null?(played?'Not priced':'Awaiting result'):signed(net))+'</div></div>';}).join('')+'</div></div>';}).join(''):'<p class="small">No predictions available for this round.</p>');
+ document.getElementById("virtualBetRoundSelect")?.addEventListener("change",e=>{virtualBetRound=e.target.value;renderVirtualBetting();});
+}
 async function refreshVirtualBetting(){
  const root=document.getElementById("betContent");
  if(!(loggedIn&&me==="Joe"&&pin))return;
  root.innerHTML='<p class="small">Loading virtual betting records…</p>';
  const {data,error}=await sb.rpc("get_virtual_betting_with_pin",{p_player:"Joe",p_pin:pin,p_season_key:SEASON_KEY});
  if(error){root.innerHTML='<div class="warn">Could not load virtual tracker: '+esc(error.message)+'</div>';return;}
- const rows=data?.rows||[],totals=Object.fromEntries(PLAYERS.map(p=>[p,{stake:0,returns:0,wins:0,priced:0}]));
- const money=n=>'£'+Number(n).toFixed(2);
- for(const r of rows){if(r.odds==null||!Array.isArray(r.actual))continue;const t=totals[r.player];t.stake+=10;t.priced++;if(Number(r.prediction[0])===Number(r.actual[0])&&Number(r.prediction[1])===Number(r.actual[1])){t.wins++;t.returns+=10*Number(r.odds);}}
- root.innerHTML='<p class="small">£10 virtual stake per priced prediction. Only finished matches with recorded pre-match odds are settled. Missing odds are excluded, not treated as losses.</p>'+
- '<div style="overflow-x:auto"><table class="leader"><thead><tr><th>Player</th><th>Staked</th><th>Returns</th><th>Profit / loss</th></tr></thead><tbody>'+
- [...PLAYERS].sort((a,b)=>(totals[b].returns-totals[b].stake)-(totals[a].returns-totals[a].stake)).map(p=>{const t=totals[p];return '<tr><td><b>'+esc(p)+'</b><div class="small">'+t.wins+' wins / '+t.priced+' settled</div></td><td>'+money(t.stake)+'</td><td>'+money(t.returns)+'</td><td style="font-weight:800;color:'+(t.returns-t.stake>=0?'#287c3e':'#c1272d')+'">'+(t.returns-t.stake>=0?'+':'')+money(t.returns-t.stake)+'</td></tr>';}).join('')+'</tbody></table></div>'+
- '<div class="warn">Automatic correct-score odds are not connected yet. Unpriced predictions are shown below, but no virtual winnings or losses will be invented.</div>'+
- '<h3>📋 Prediction ledger</h3><div class="betLedger">'+rows.slice().reverse().map(r=>{const pred=Array.isArray(r.prediction)?r.prediction.join('–'):'—',actual=Array.isArray(r.actual)?r.actual.join('–'):'Not finished',priced=r.odds!=null,finished=Array.isArray(r.actual),win=finished&&priced&&r.prediction[0]===r.actual[0]&&r.prediction[1]===r.actual[1];return '<div class="betRow"><b>'+esc(r.player)+'</b> · '+esc(r.round)+'<div>'+esc(r.home)+' v '+esc(r.away)+'</div><div class="small">Pick '+esc(pred)+' · Result '+esc(actual)+' · '+(priced?'Odds '+Number(r.odds).toFixed(2)+' ('+esc(r.bookmaker)+')':'Odds unavailable')+(priced&&finished?' · '+(win?'Won '+money(10*Number(r.odds)):'Lost £10'):'')+'</div></div>';}).join('')+'</div>';
+ virtualBetRows=data?.rows||[];
+ renderVirtualBetting();
 }
 
 let matchRefreshInProgress=false;
