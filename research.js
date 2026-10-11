@@ -71,18 +71,28 @@ function researchPlayerScreenRows(docs,market,line,minMinutes,fixtureKey="all"){
   }));
  });
 }
+function researchSortScreenRows(rows,field,direction){
+ const value=r=>field==='hitRate'?(r.n>0?r.hits/r.n:null):r[field];
+ const order=direction==='asc'?1:-1;
+ return rows.slice().sort((a,b)=>{
+  const av=value(a),bv=value(b),am=!Number.isFinite(av),bm=!Number.isFinite(bv);
+  if(am||bm)return am===bm?0:am?1:-1;
+  return order*(av-bv);
+ });
+}
 function renderResearchScreen(){
  const panel=document.createElement("div");panel.className="card";panel.style="margin:0 0 20px;border:1px solid #ddd;box-shadow:none";
  const docs=researchDocs.filter(d=>d.key.startsWith('note:')&&Array.isArray(d.payload?.players)&&Array.isArray(d.payload?.markets));
  if(!docs.length)return;
  const markets=[...new Set(docs.flatMap(d=>d.payload.markets))],count=docs.reduce((n,d)=>n+d.payload.players.length,0);
- panel.innerHTML='<h3>Player market screen</h3><p class="small">'+count+' researched player samples across '+docs.length+' match report(s). League-wide coverage is not complete. Prices below are unverified Statz snapshots.</p><label>Fixture<select id="researchScreenFixture" class="roundPickerSelect"><option value="all">All researched fixtures</option>'+docs.map(d=>'<option value="'+esc(d.key)+'">'+esc(d.payload.title)+'</option>').join('')+'</select></label><label>Market<select id="researchScreenMarket" class="roundPickerSelect"><option value="all">All six markets</option>'+markets.map(m=>'<option '+(m==='Shots on target'?'selected':'')+' value="'+esc(m)+'">'+esc(m)+'</option>').join('')+'</select></label><label>Line<select id="researchScreenLine" class="roundPickerSelect"><option value="1">1+</option><option value="2">2+</option><option value="3">3+ · no price feed</option></select></label><label>Appearance minutes<select id="researchScreenMinutes" class="roundPickerSelect"><option value="0">All played appearances</option><option value="60">60+ minutes only</option></select></label><div id="researchScreenRows"></div><p class="small">Historical frequency and break-even are comparison inputs. They are not a next-match probability or a confirmed edge. Filtering minutes changes the sample; a 60+ minute appearance does not prove the player started.</p>';
+ panel.innerHTML='<h3>Player market screen</h3><p class="small">'+count+' researched player samples across '+docs.length+' match report(s). League-wide coverage is not complete. Prices below are unverified Statz snapshots.</p><label>Fixture<select id="researchScreenFixture" class="roundPickerSelect"><option value="all">All researched fixtures</option>'+docs.map(d=>'<option value="'+esc(d.key)+'">'+esc(d.payload.title)+'</option>').join('')+'</select></label><label>Market<select id="researchScreenMarket" class="roundPickerSelect"><option value="all">All six markets</option>'+markets.map(m=>'<option '+(m==='Shots on target'?'selected':'')+' value="'+esc(m)+'">'+esc(m)+'</option>').join('')+'</select></label><label>Line<select id="researchScreenLine" class="roundPickerSelect"><option value="1">1+</option><option value="2">2+</option><option value="3">3+ · no price feed</option></select></label><label>Appearance minutes<select id="researchScreenMinutes" class="roundPickerSelect"><option value="0">All played appearances</option><option value="60">60+ minutes only</option></select></label><label>Sort by<select id="researchScreenSort" class="roundPickerSelect"><option value="hitRate">Historical hit rate</option><option value="minutes">Average minutes</option><option value="odds">Unverified price</option><option value="breakEven">Break-even</option></select></label><label>Order<select id="researchScreenOrder" class="roundPickerSelect"><option value="desc">High to low</option><option value="asc">Low to high</option></select></label><div id="researchScreenRows"></div><p class="small">Historical frequency and break-even are comparison inputs. They are not a next-match probability or a confirmed edge. Filtering minutes changes the sample; a 60+ minute appearance does not prove the player started.</p>';
  document.getElementById("researchContent").prepend(panel);
  const update=()=>{
-  const rows=researchPlayerScreenRows(researchDocs,document.getElementById('researchScreenMarket').value,Number(document.getElementById('researchScreenLine').value),Number(document.getElementById('researchScreenMinutes').value),document.getElementById('researchScreenFixture').value);
+  const filteredRows=researchPlayerScreenRows(researchDocs,document.getElementById('researchScreenMarket').value,Number(document.getElementById('researchScreenLine').value),Number(document.getElementById('researchScreenMinutes').value),document.getElementById('researchScreenFixture').value);
+  const rows=researchSortScreenRows(filteredRows,document.getElementById('researchScreenSort').value,document.getElementById('researchScreenOrder').value);
   document.getElementById('researchScreenRows').innerHTML='<div style="overflow-x:auto"><table class="leader"><thead><tr><th>Player / match</th><th>Market</th><th>Historical hit</th><th>Avg minutes</th><th>Unverified price</th><th>Break-even</th></tr></thead><tbody>'+rows.map(r=>'<tr><td>'+esc(r.player)+'<details><summary class="small">Sample context</summary><p class="small">'+esc(r.fixture)+'</p><p class="small">'+esc(r.notes)+'</p></details></td><td>'+esc(r.market)+' '+r.line+'+</td><td>'+(r.n?r.hits+'/'+r.n+' · '+(100*r.hits/r.n).toFixed(0)+'%':'—')+(r.n<5?'<div class="small">Limited sample</div>':'')+'</td><td>'+(r.minutes==null?'—':r.minutes.toFixed(0))+'</td><td>'+(r.odds==null?'—':r.odds.toFixed(2))+'</td><td>'+(r.breakEven==null?'—':r.breakEven.toFixed(1)+'%')+'</td></tr>').join('')+'</tbody></table></div>';
  };
- for(const id of ['researchScreenFixture','researchScreenMarket','researchScreenLine','researchScreenMinutes'])document.getElementById(id).onchange=update;
+ for(const id of ['researchScreenFixture','researchScreenMarket','researchScreenLine','researchScreenMinutes','researchScreenSort','researchScreenOrder'])document.getElementById(id).onchange=update;
  update();
 }
 function renderResearchGoals(comp,home,away){
