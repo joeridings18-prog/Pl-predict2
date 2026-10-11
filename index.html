@@ -117,6 +117,7 @@ details.predictionCard[open]>summary::after{transform:rotate(180deg)}
   <button id="matchViewBtn" class="viewTab hidden" type="button">⚽ Predictions Hub</button>
   <button id="statsViewBtn" class="viewTab" type="button">📊 Stats & Records</button>
   <button id="aiViewBtn" class="viewTab hidden" type="button">🔒 AI Tracker</button>
+  <button id="researchViewBtn" class="viewTab hidden" type="button">🔒 Research</button>
   <button id="betViewBtn" class="viewTab" type="button">💷 Virtual Betting</button>
 </div>
 
@@ -190,6 +191,7 @@ details.predictionCard[open]>summary::after{transform:rotate(180deg)}
 
 <div id="matchView" class="hidden"><div class="statsHero"><h2>⚽ Predictions Hub</h2><div class="small">All predictions, live and final scores, provisional standings and previous rounds in one place.</div></div><div class="card"><div class="gwNav"><select id="matchRoundSelect" aria-label="Predictions Hub round" style="width:100%;padding:12px"></select></div><button class="submit" id="refreshMatchBtn" type="button">↻ Refresh Predictions Hub</button><div id="matchContent" style="margin-top:14px">Choose a round to see matches.</div></div></div>
 <div id="betView" class="hidden"><div class="statsHero"><h2>💷 Virtual Betting Tracker</h2><div class="small">£10-per-prediction trackers for correct scores and match results. Predictions appear after the reveal deadline. No real bets.</div></div><div id="betContent" class="card"><p class="small">Loading virtual results…</p></div></div>
+<div id="researchView" class="hidden"><div class="statsHero"><h2>🔒 Match Research</h2><div class="small">Joe’s private player-prop and team-goals research.</div></div><div id="researchContent" class="card"></div></div>
 <div id="aiView" class="hidden">
 <div class="statsHero"><h2>🔒 Al's AI Tracker</h2><div class="small">Private season-long prediction experiment. Predictions are locked before kickoff.</div></div>
 <div id="aiTrackerContent" class="card"><p class="small">Loading AI statistics…</p></div>
@@ -221,6 +223,7 @@ details.predictionCard[open]>summary::after{transform:rotate(180deg)}
 
 </div>
 
+<script src="./research.js"></script>
 <script>
 const SUPABASE_URL="https://ekbwbibmicqfrompglyq.supabase.co";
 const SUPABASE_KEY="sb_publishable_3_9tReCoYfbZG5if1PKAPQ_am8pb55g";
@@ -561,10 +564,12 @@ async function saveResults(){
 
 function updateAiAccess(){
  const allowed=loggedIn&&me==="Joe";
+ document.getElementById("researchViewBtn").classList.toggle("hidden",!allowed);
+ if(!allowed){researchClear();if(!document.getElementById("researchView").classList.contains("hidden"))showView("game");}
  document.getElementById("aiViewBtn").classList.toggle("hidden",!allowed);
  document.getElementById("betViewBtn").classList.remove("hidden");
  document.getElementById("matchViewBtn").classList.toggle("hidden",!loggedIn);
- document.getElementById("mainViewTabs").style.gridTemplateColumns=allowed?"repeat(5,1fr)":loggedIn?"repeat(4,1fr)":"repeat(3,1fr)";
+ document.getElementById("mainViewTabs").style.gridTemplateColumns=allowed?"repeat(3,1fr)":loggedIn?"repeat(4,1fr)":"repeat(3,1fr)";
  if(!allowed && !document.getElementById("aiView").classList.contains("hidden")) showView("game");
  if(!loggedIn && !document.getElementById("matchView").classList.contains("hidden")) showView("game");
 }
@@ -572,21 +577,25 @@ let matchAutoTimer=null;
 function showView(view){
  if(matchAutoTimer){clearInterval(matchAutoTimer);matchAutoTimer=null;}
  const ai=view==="ai"&&loggedIn&&me==="Joe";
+ const research=view==="research"&&loggedIn&&me==="Joe";
  const bet=view==="bet";
  const stats=view==="stats";
  const match=view==="match"&&loggedIn;
- document.getElementById("gameView").classList.toggle("hidden",ai||stats||match||bet);
+ document.getElementById("gameView").classList.toggle("hidden",ai||stats||match||bet||research);
+ document.getElementById("researchView").classList.toggle("hidden",!research);
+ document.getElementById("researchViewBtn").classList.toggle("active",research);
  document.getElementById("statsView").classList.toggle("hidden",!stats);
  document.getElementById("matchView").classList.toggle("hidden",!match);
  document.getElementById("aiView").classList.toggle("hidden",!ai);
  document.getElementById("betView").classList.toggle("hidden",!bet);
- document.getElementById("gameViewBtn").classList.toggle("active",!ai&&!stats&&!match&&!bet);
+ document.getElementById("gameViewBtn").classList.toggle("active",!ai&&!stats&&!match&&!bet&&!research);
  document.getElementById("statsViewBtn").classList.toggle("active",stats);
  document.getElementById("aiViewBtn").classList.toggle("active",ai);
  document.getElementById("matchViewBtn").classList.toggle("active",match);
  document.getElementById("betViewBtn").classList.toggle("active",bet);
  if(stats)refreshStats();
  if(ai)refreshAiTracker();
+ if(research)refreshResearch();
  if(bet)refreshVirtualBetting();
  if(match){refreshMatchCentre();matchAutoTimer=setInterval(()=>{if(!document.hidden&&loggedIn&&!document.getElementById("matchView").classList.contains("hidden"))refreshMatchCentre(true);},120000);}
 }
@@ -912,6 +921,7 @@ document.getElementById("matchViewBtn").onclick=()=>showView("match");
 document.getElementById("refreshMatchBtn").onclick=refreshMatchCentre;
 document.getElementById("matchRoundSelect").onchange=refreshMatchCentre;
 document.getElementById("aiViewBtn").onclick=()=>showView("ai");
+document.getElementById("researchViewBtn").onclick=()=>showView("research");
 document.getElementById("betViewBtn").onclick=()=>showView("bet");
 document.getElementById("notifyBtn").addEventListener("click",async()=>{const out=document.getElementById("notifyStatus");if(!("Notification" in window)){out.textContent="Notifications are not supported in this browser.";return;}try{const permission=await Notification.requestPermission();out.textContent=permission==="granted"?"Notifications allowed. Push delivery is not configured yet.":permission==="denied"?"Notifications blocked in browser settings.":"Notification permission not granted.";}catch(err){out.textContent="Notification permission failed: "+err.message;}});
 document.getElementById("testNotifyBtn").addEventListener("click",async()=>{const out=document.getElementById("notifyStatus");try{if(!("serviceWorker" in navigator)||!("Notification" in window))throw Error("Notifications are not supported on this browser.");if(Notification.permission!=="granted")throw Error("Tap Enable Notifications first.");const reg=await navigator.serviceWorker.register("./sw.js",{scope:"./"});await navigator.serviceWorker.ready;await reg.showNotification("PL Predict test ⚽",{body:"Great! Notifications are working on this device.",tag:"pl-test",data:{url:"./"}});out.textContent="✅ Test notification requested. Check your Android notification panel.";}catch(err){out.textContent="⚠️ "+err.message;}});
@@ -941,3 +951,4 @@ start();
 </script>
 </body>
 </html>
+
