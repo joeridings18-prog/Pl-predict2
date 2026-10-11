@@ -214,12 +214,6 @@ details.predictionCard[open]>summary::after{transform:rotate(180deg)}
   </div>
 
   <div class="card">
-    <h2 style="margin-top:0">💷 Virtual Betting Stats</h2>
-    <p class="small">£10 per prediction. Biggest wins show the total return, including the stake. Streaks and averages use settled predictions with available odds, ordered by kickoff; simultaneous fixtures use their round fixture order.</p>
-    <div id="bettingPlayerStats" class="playerStatsGrid"><p class="small">Loading betting statistics…</p></div>
-  </div>
-
-  <div class="card">
     <h2 style="margin-top:0">🏅 Season Records</h2>
     <div id="recordStats" class="recordGrid"></div>
   </div>
@@ -754,7 +748,7 @@ function calculateBettingPlayerStats(rows,rounds){
  });
 }
 async function refreshBettingStats(){
- const root=document.getElementById("bettingPlayerStats");
+
  try{
   const {data,error}=await sb.rpc("get_virtual_betting_public",{p_season_key:SEASON_KEY});
   if(error)throw error;
@@ -765,19 +759,25 @@ async function refreshBettingStats(){
    const pick=market==="score"?entry.prediction.join("–"):difference>0?entry.home+" win":difference<0?entry.away+" win":"Draw";
    return '<b>£'+entry.returns.toFixed(2)+'</b><span>+£'+entry.profit.toFixed(2)+' profit · '+entry.odds.toFixed(2)+' odds</span><div class="small" style="margin-top:6px">'+esc(entry.home)+' v '+esc(entry.away)+'</div><div class="small">'+esc(entry.round)+' · '+esc(pick)+'</div>';
   };
-  root.innerHTML=stats.map(p=>'<div class="playerStatCard"><h3>'+esc(p.player)+'</h3><div class="statMiniGrid">'+
+  for(const p of stats){
+   const root=document.getElementById("bettingStats-"+p.player);
+   if(!root)continue;
+   root.innerHTML='<div class="statMiniGrid">'+
    '<div class="statMini"><span>💥 Biggest Correct Score win</span>'+biggest(p.score.biggest,"score")+'</div>'+
    '<div class="statMini"><span>💥 Biggest Match Result win</span>'+biggest(p.result.biggest,"result")+'</div>'+
    '<div class="statMini"><span>🔥 Longest winning streak</span><b>'+p.score.longest+' <small style="font-size:11px;font-weight:400">Correct Score</small></b><b>'+p.result.longest+' <small style="font-size:11px;font-weight:400">Match Result</small></b></div>'+
    '<div class="statMini"><span>⚖️ Average winning odds</span><b>'+(p.score.average===null?'—':p.score.average.toFixed(2))+' <small style="font-size:11px;font-weight:400">Correct Score</small></b><b>'+(p.result.average===null?'—':p.result.average.toFixed(2))+' <small style="font-size:11px;font-weight:400">Match Result</small></b></div>'+
-   '</div></div>').join("");
+   '</div>';
+  }
  }catch(err){
-  root.innerHTML='<div class="warn">Could not load betting statistics: '+esc(err.message||err)+'</div>';
+  for(const player of PLAYERS){
+   const root=document.getElementById("bettingStats-"+player);
+   if(root)root.innerHTML='<div class="warn">Could not load betting statistics: '+esc(err.message||err)+'</div>';
+  }
  }
 }
 
 async function refreshStats(force=false){
-  refreshBettingStats();
   try{
     const stats=await getStatsData(force);
     const players=stats?.players||[];
@@ -815,7 +815,11 @@ async function refreshStats(force=false){
           <div class="statMini"><span>🔮 Most predicted score</span><b>${esc(p.most_predicted_scoreline||"—")}</b><span>${p.most_predicted_scoreline_uses?`${p.most_predicted_scoreline_uses} times`:""}</span></div>
           <div class="statMini"><span>🥄 Wooden spoons</span><b>${p.wooden_spoons}</b></div>
         </div>
+        <h4 style="margin:16px 0 9px;padding-top:14px;border-top:1px solid #eee">💷 Virtual Betting Stats</h4>
+        <p class="small" style="margin:0 0 10px">£10 per prediction. Biggest wins include the stake. Streaks and averages use settled, priced predictions in kickoff order.</p>
+        <div id="bettingStats-${esc(p.player)}"><p class="small">Loading betting statistics…</p></div>
       </div>`).join("");
+    await refreshBettingStats();
 
     const r=stats?.records||{};
     const hi=r.highest_gameweek_score||{};
