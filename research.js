@@ -37,8 +37,21 @@ function renderResearch(){
  document.getElementById("refreshResearchGoals").onclick=refreshResearchGoals;
  document.getElementById("researchQuoteForm").onsubmit=saveResearchQuote;
  renderResearchGoals(comp,home,away);
+ renderResearchPilot();
  const quotes=researchDocs.filter(d=>d.key.startsWith("quote:")).sort((a,b)=>Date.parse(b.payload.captured_at)-Date.parse(a.payload.captured_at));
  document.getElementById("researchQuotes").innerHTML='<h3>Saved price history</h3>'+(quotes.length?quotes.map(d=>{const p=d.payload;return '<div class="statusRow"><div><b>'+esc(p.selection)+'</b><div class="small">'+esc(p.match)+' · '+esc(p.bookmaker)+' · '+esc(new Date(p.captured_at).toLocaleString("en-GB"))+'</div><div class="small">'+esc(p.notes||"")+'</div></div><div><b>'+Number(p.odds).toFixed(2)+'</b><div class="small">'+(100/Number(p.odds)).toFixed(1)+'% break-even</div></div></div>';}).join(""):'<p class="small">No price snapshots recorded yet.</p>');
+}
+function renderResearchPilot(){
+ const pilot=researchDocs.find(d=>d.key==="note:pilot_liverpool_city_20261011")?.payload;
+ if(!pilot)return;
+ const panel=document.createElement("div");panel.className="card";panel.style="margin:0 0 20px;border:1px solid #ddd;box-shadow:none";
+ panel.innerHTML='<h3>'+esc(pilot.title)+'</h3><p><b>'+esc(pilot.status)+'</b></p><p class="small">'+esc(pilot.scope)+'</p><p class="warn">'+esc(pilot.price_status)+'</p>'+
+ (pilot.players||[]).map(p=>'<details class="fixtureCompare" open><summary><b>'+esc(p.name)+'</b> · last five PL appearances</summary><div style="overflow-x:auto"><table class="leader"><thead><tr><th>Market</th><th>Last five counts</th><th>1+ hit</th><th>Source price 1+</th><th>Break-even</th></tr></thead><tbody>'+
+ pilot.markets.map((market,i)=>{const counts=p.matches.map(m=>m.counts[i]),hits=counts.filter(v=>v>=1).length,odds=p.odds_1_plus[i];return '<tr><td>'+esc(market)+'</td><td>'+counts.join(", ")+'</td><td>'+hits+'/'+counts.length+'</td><td>'+Number(odds).toFixed(2)+'</td><td>'+(100/odds).toFixed(1)+'%</td></tr>';}).join("")+
+ '</tbody></table></div><p class="small">Counts and prices from a single research source. Break-even is 1 ÷ odds; recent hit rates do not establish the probability of the next match.</p>'+
+ '<details><summary>Sample dates, opponents and minutes</summary>'+p.matches.map(m=>'<div class="statusRow"><span>'+esc(m.date)+' · '+esc(m.opponent)+' · '+esc(m.venue)+'</span><span>'+m.minutes+' minutes</span></div>').join("")+'</details><p><a href="'+esc(p.source_url)+'" target="_blank" rel="noopener">Source player page</a></p></details>').join("")+
+ '<p class="small">Research captured '+esc(new Date(pilot.checked_at).toLocaleString("en-GB"))+'. This is the capture time, not the bookmaker price update time.</p><h4>Next checks</h4><ul>'+pilot.next_steps.map(s=>'<li>'+esc(s)+'</li>').join("")+'</ul>';
+ document.getElementById("researchContent").prepend(panel);
 }
 function renderResearchGoals(comp,home,away){
  const matches=researchGoalMatches(comp),teams=[...new Set(matches.flatMap(m=>[m.home,m.away]))].sort();
