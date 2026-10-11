@@ -1,0 +1,84 @@
+// Private payloads are fetched only through Joe's PIN-checked database RPCs.
+let researchDocs=[],researchRequest=0;
+const researchCompetitions={PL:"Premier League",ELC:"Championship",CL:"Champions League"};
+function researchClear(){
+ researchRequest++;researchDocs=[];
+ document.getElementById("researchContent").textContent="";
+}
+async function refreshResearch(){
+ const root=document.getElementById("researchContent"),request=++researchRequest;
+ if(!(loggedIn&&me==="Joe"&&pin)){researchClear();return;}
+ root.textContent="Loading private research…";
+ const {data,error}=await sb.rpc("get_research_with_pin",{p_player:me,p_pin:pin});
+ if(request!==researchRequest||!loggedIn||me!=="Joe")return;
+ if(error){root.textContent="Could not load research: "+error.message;return;}
+ researchDocs=data||[];renderResearch();
+}
+function researchGoalMatches(comp){
+ const d=researchDocs.find(d=>d.key==="goals:"+comp+":"+SEASON_KEY)?.payload;
+ return (d?.matches||[]).filter(m=>m.status==="FINISHED"&&Number.isInteger(m.homeScore)&&Number.isInteger(m.awayScore)&&Date.parse(m.utcDate)<Date.now());
+}
+function researchTeamStats(matches,team,venue){
+ const rows=matches.filter(m=>venue==="home"?m.home===team:m.away===team).sort((a,b)=>Date.parse(b.utcDate)-Date.parse(a.utcDate));
+ const n=rows.length,sum=key=>rows.reduce((s,m)=>s+m[key],0);
+ return {rows,n,scored:n?sum(venue==="home"?"homeScore":"awayScore")/n:null,conceded:n?sum(venue==="home"?"awayScore":"homeScore")/n:null,total:n?(sum("homeScore")+sum("awayScore"))/n:null};
+}
+function researchRate(rows,line){return rows.length?rows.filter(m=>m.homeScore+m.awayScore>line).length+"/"+rows.length:"—";}
+function researchAvg(v){return v==null?"—":v.toFixed(2);}
+function renderResearch(){
+ const root=document.getElementById("researchContent");
+ const comp=root.querySelector("#researchLeague")?.value||"PL",home=root.querySelector("#researchHome")?.value,away=root.querySelector("#researchAway")?.value;
+ const source=researchDocs.find(d=>d.key==="sources")?.payload||{};
+ root.innerHTML='<h3>Team goals · home and away</h3><label for="researchLeague">Competition</label><select id="researchLeague" class="roundPickerSelect">'+Object.entries(researchCompetitions).map(([k,v])=>'<option value="'+k+'" '+(k===comp?'selected':'')+'>'+esc(v)+'</option>').join("")+'</select><p class="small">Season 2026/27 · completed matches only · each competition kept separate. Small venue samples are shown explicitly.</p><button id="refreshResearchGoals" class="submit">↻ Update and save goals data</button><p id="researchUpdateStatus" class="small"></p><div id="researchGoals"></div><h3>Player markets</h3><p>'+esc((source.markets||[]).join(" · "))+'</p><p class="small">Player match logs and automated prop prices are awaiting verified provider access. No player hit rates or value estimates have been invented.</p><h3>Save a bookmaker price</h3><p class="small">Record an exact selection for later research. A saved price alone is not a value recommendation.</p><form id="researchQuoteForm" style="display:grid;gap:10px"><label>Match<input name="match" required maxlength="120" placeholder="Liverpool v Manchester City" style="display:block;width:100%;padding:10px"></label><label>Selection<input name="selection" required maxlength="160" placeholder="Haaland 1+ shots on target / Over 2.5 goals" style="display:block;width:100%;padding:10px"></label><label>Bookmaker<input name="bookmaker" required maxlength="60" value="Bet365" style="display:block;width:100%;padding:10px"></label><label>Decimal odds<input name="odds" type="number" min="1.01" max="10000" step="0.01" required style="display:block;width:100%;padding:10px"></label><label>Source link<input name="source" type="url" required placeholder="https://" style="display:block;width:100%;padding:10px"></label><label>Notes<textarea name="notes" maxlength="2000" style="display:block;width:100%;padding:10px"></textarea></label><button class="submit" type="submit">Save private price snapshot</button><p id="researchQuoteStatus" class="small"></p></form><div id="researchQuotes"></div><h3>Data-source research</h3>'+
+ (source.providers||[]).map(p=>'<details class="fixtureCompare"><summary><b>'+esc(p.name)+'</b> · '+esc(p.price)+'</summary><p>'+esc(p.status)+'</p><p class="small">'+esc(p.notes)+'</p><a href="'+esc(p.url)+'" target="_blank" rel="noopener">Provider documentation</a></details>').join("")+'<p class="small">'+esc(source.next_step)+'</p>';
+ document.getElementById("researchLeague").onchange=()=>renderResearch();
+ document.getElementById("refreshResearchGoals").onclick=refreshResearchGoals;
+ document.getElementById("researchQuoteForm").onsubmit=saveResearchQuote;
+ renderResearchGoals(comp,home,away);
+ const quotes=researchDocs.filter(d=>d.key.startsWith("quote:")).sort((a,b)=>Date.parse(b.payload.captured_at)-Date.parse(a.payload.captured_at));
+ document.getElementById("researchQuotes").innerHTML='<h3>Saved price history</h3>'+(quotes.length?quotes.map(d=>{const p=d.payload;return '<div class="statusRow"><div><b>'+esc(p.selection)+'</b><div class="small">'+esc(p.match)+' · '+esc(p.bookmaker)+' · '+esc(new Date(p.captured_at).toLocaleString("en-GB"))+'</div><div class="small">'+esc(p.notes||"")+'</div></div><div><b>'+Number(p.odds).toFixed(2)+'</b><div class="small">'+(100/Number(p.odds)).toFixed(1)+'% break-even</div></div></div>';}).join(""):'<p class="small">No price snapshots recorded yet.</p>');
+}
+function renderResearchGoals(comp,home,away){
+ const matches=researchGoalMatches(comp),teams=[...new Set(matches.flatMap(m=>[m.home,m.away]))].sort();
+ const doc=researchDocs.find(d=>d.key==="goals:"+comp+":"+SEASON_KEY)?.payload;
+ const root=document.getElementById("researchGoals");
+ if(!matches.length){root.textContent="No completed matches stored for this competition.";return;}
+ const options=(selected,preferred)=>teams.map(t=>'<option '+(t===(teams.includes(selected)?selected:preferred)?'selected':'')+' value="'+esc(t)+'">'+esc(t)+'</option>').join("");
+ root.innerHTML='<p class="small">'+matches.length+' completed results · '+esc(doc?.source||"")+' · captured '+esc(new Date(doc?.fetched_at).toLocaleString("en-GB"))+'</p><label>Home team<select id="researchHome" class="roundPickerSelect">'+options(home,teams.find(t=>/Liverpool/.test(t))||teams[0])+'</select></label><label>Away team<select id="researchAway" class="roundPickerSelect">'+options(away,teams.find(t=>/Manchester City/.test(t))||teams[1])+'</select></label><div id="researchMatchup"></div><details class="fixtureCompare"><summary>All teams · venue averages</summary><div style="overflow-x:auto"><table class="leader"><thead><tr><th>Team / venue</th><th>Games</th><th>Scored</th><th>Conceded</th><th>Total</th></tr></thead><tbody>'+teams.flatMap(t=>["home","away"].map(v=>{const s=researchTeamStats(matches,t,v);return '<tr><td>'+esc(t)+'<div class="small">'+v+'</div></td><td>'+s.n+'</td><td>'+researchAvg(s.scored)+'</td><td>'+researchAvg(s.conceded)+'</td><td>'+researchAvg(s.total)+'</td></tr>';})).join("")+'</tbody></table></div></details>';
+ const update=()=>{
+  const h=document.getElementById("researchHome").value,a=document.getElementById("researchAway").value,out=document.getElementById("researchMatchup");
+  if(h===a){out.textContent="Choose two different teams.";return;}
+  const hs=researchTeamStats(matches,h,"home"),as=researchTeamStats(matches,a,"away");
+  out.innerHTML='<h3>'+esc(h)+' v '+esc(a)+'</h3><div style="overflow-x:auto"><table class="leader"><thead><tr><th>Metric</th><th>Home team at home</th><th>Away team away</th></tr></thead><tbody>'+
+  [["Games",hs.n,as.n],["Goals scored / game",researchAvg(hs.scored),researchAvg(as.scored)],["Goals conceded / game",researchAvg(hs.conceded),researchAvg(as.conceded)],["Total match goals / game",researchAvg(hs.total),researchAvg(as.total)]].map(r=>'<tr>'+r.map(v=>'<td>'+esc(v)+'</td>').join("")+'</tr>').join("")+
+  [1.5,2.5,3.5].map(line=>'<tr><td>Over '+line+' · season</td><td>'+researchRate(hs.rows,line)+'</td><td>'+researchRate(as.rows,line)+'</td></tr><tr><td>Over '+line+' · last 5 at venue</td><td>'+researchRate(hs.rows.slice(0,5),line)+'</td><td>'+researchRate(as.rows.slice(0,5),line)+'</td></tr>').join("")+'</tbody></table></div><p class="small">Under rates are the remaining games at each half-goal line. These are historical hit rates, not estimated probabilities for this matchup. Both teams’ attacking and defensive records matter; do not add the two total-goal averages together.</p>'+
+  (hs.n<5||as.n<5?'<p class="warn">Limited sample: at least one team has fewer than five matches at this venue.</p>':'')+
+  [["Home team’s last 5 home results",hs.rows],["Away team’s last 5 away results",as.rows]].map(([title,rows])=>'<details class="fixtureCompare"><summary>'+title+'</summary>'+rows.slice(0,5).map(m=>'<div class="statusRow"><span>'+esc(m.home)+' v '+esc(m.away)+'<div class="small">'+esc(new Date(m.utcDate).toLocaleDateString("en-GB"))+'</div></span><b>'+m.homeScore+'–'+m.awayScore+'</b></div>').join("")+'</details>').join("");
+ };document.getElementById("researchHome").onchange=update;document.getElementById("researchAway").onchange=update;update();
+}
+async function saveResearchQuote(e){
+ e.preventDefault();if(!(loggedIn&&me==="Joe"&&pin))return;
+ const form=e.currentTarget,button=form.querySelector("button"),out=document.getElementById("researchQuoteStatus");
+ const fields=Object.fromEntries(new FormData(form)),odds=Number(fields.odds);
+ if(!Number.isFinite(odds)||odds<=1){out.textContent="Enter valid decimal odds above 1.";return;}
+ const payload={...fields,odds,captured_at:new Date().toISOString(),kind:"manual_price_snapshot"},key="quote:"+crypto.randomUUID();
+ button.disabled=true;
+ try{const {error}=await sb.rpc("save_research_with_pin",{p_player:me,p_pin:pin,p_key:key,p_payload:payload});if(error)throw error;if(!loggedIn||me!=="Joe")return;await refreshResearch();}
+ catch(err){out.textContent="Could not save: "+err.message;}finally{button.disabled=false;}
+}
+async function refreshResearchGoals(){
+ if(!(loggedIn&&me==="Joe"&&pin))return;
+ const comp=document.getElementById("researchLeague").value,button=document.getElementById("refreshResearchGoals"),out=document.getElementById("researchUpdateStatus"),request=researchRequest;
+ button.disabled=true;out.textContent="Fetching completed results…";
+ try{
+  const now=new Date(),dateTo=new Intl.DateTimeFormat("en-CA",{timeZone:"Europe/London",year:"numeric",month:"2-digit",day:"2-digit"}).format(now);
+  const response=await fetch(SUPABASE_URL+"/functions/v1/football-scores?competition="+comp+"&dateFrom=2026-08-01&dateTo="+dateTo);
+  const d=await response.json();if(!response.ok||d.error||!Array.isArray(d.matches))throw Error(d.error||"Score feed unavailable");
+  if(request!==researchRequest||!loggedIn||me!=="Joe")return;
+  const previous=researchDocs.find(d=>d.key==="goals:"+comp+":"+SEASON_KEY)?.payload?.matches||[],merged=new Map(previous.map(m=>[m.id,m]));
+  for(const m of d.matches){if(m.status==="FINISHED"&&Number.isInteger(m.homeScore)&&Number.isInteger(m.awayScore))merged.set(m.id,m);else if(merged.has(m.id))merged.delete(m.id);}
+  const payload={competition:comp,season:SEASON_KEY,source:"football-data.org via existing score feed",fetched_at:d.updatedAt,date_from:"2026-08-01",date_to:dateTo,matches:[...merged.values()]};
+  const {error}=await sb.rpc("save_research_with_pin",{p_player:me,p_pin:pin,p_key:"goals:"+comp+":"+SEASON_KEY,p_payload:payload});if(error)throw error;
+  await refreshResearch();document.getElementById("researchUpdateStatus").textContent="Completed results updated and saved.";
+ }catch(err){out.textContent="Could not update: "+err.message;}finally{button.disabled=false;}
+}
