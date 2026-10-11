@@ -692,13 +692,49 @@ async function refreshMatchCentre(silent=false){
  '<h3>Fixtures</h3><p class="small">Tap a fixture to expand or collapse predictions.</p>'+rows.map(({f,i,m,r,live,score,provisional})=>'<details class="fixtureCompare" data-fixture="'+i+'" '+(collapsedBefore.has(String(i))?'':'open')+'><summary><b>'+esc(f[0])+' v '+esc(f[1])+'</b><div class="small">'+(r?(m&&["IN_PLAY","LIVE","PAUSED"].includes(m.status)?"🔴 LIVE "+r.join("–")+" (admin score)":m&&m.status==="FINISHED"?"✅ FT "+r.join("–")+" (admin result)":"📝 Admin score "+r.join("–")+" (full-time unconfirmed)"):live?(m.status==="FINISHED"?"✅ FT ":"🔴 "+(m.status==="PAUSED"?"HT / paused ":m.status==="IN_PLAY"||m.status==="LIVE"?"LIVE ":"Score "))+live.join("–")+" (delayed)":m&&["IN_PLAY","LIVE","PAUSED"].includes(m.status)?"🔴 LIVE • score pending from provider":"Awaiting score")+'</div></summary><div class="small">'+esc(f[2]||'')+(provisional?' • Provisional score':'')+'</div>'+(revealed?'<div class="predGrid">'+PLAYERS.map(p=>{const v=picks[p]?.[i],pts=score&&Array.isArray(v)?calc(v,score):0;return '<div class="predCell '+(pts===16?'exact':pts===6?'correct':'')+'"><b>'+esc(p)+'</b><div class="predScore">'+(Array.isArray(v)?esc(v[0])+'–'+esc(v[1]):'—')+'</div><div class="predPts">'+(score&&Array.isArray(v)?(pts?'✓ +'+pts:'+0'):'')+'</div></div>';}).join('')+'</div>':'<p class="small">Predictions locked until reveal.</p>')+'</details>').join('');
  }finally{matchRefreshInProgress=false;}
 }
+
+function aiBetSettlement(row,market){
+ const odds=Number(market==="score"?row?.odds:row?.result_odds);
+ const valid=v=>Array.isArray(v)&&v.length===2&&v.every(x=>x!==null&&x!==""&&Number.isFinite(Number(x)));
+ if(!valid(row?.prediction))return {status:"missing",stake:0,returns:0,profit:0};
+ if(!Number.isFinite(odds)||odds<=1)return {status:"unpriced",stake:0,returns:0,profit:0};
+ if(!valid(row.actual))return {status:"pending",odds,stake:0,returns:0,profit:0};
+ const won=market==="score"
+  ?Number(row.prediction[0])===Number(row.actual[0])&&Number(row.prediction[1])===Number(row.actual[1])
+  :Math.sign(Number(row.prediction[0])-Number(row.prediction[1]))===Math.sign(Number(row.actual[0])-Number(row.actual[1]));
+ const returns=won?10*odds:0;
+ return {status:"settled",odds,won,stake:10,returns,profit:returns-10};
+}
+function aiBetMoney(value,signed=false){
+ const n=Number(value)||0;
+ return (signed?(n>=0?"+":"−"):"")+"£"+Math.abs(n).toFixed(2);
+}
+function aiBetSummary(rows){
+ const markets=[["score","🎯 Correct Score"],["result","⚽ Match Result"]];
+ return '<div style="overflow-x:auto"><table class="leader"><thead><tr><th>Market</th><th>Staked</th><th>Returns</th><th>Profit / loss</th></tr></thead><tbody>'+markets.map(([market,label])=>{
+  const t={stake:0,returns:0,settled:0,pending:0,unpriced:0,wins:0};
+  for(const row of rows){const b=aiBetSettlement(row,market);if(b.status==="settled"){t.stake+=b.stake;t.returns+=b.returns;t.settled++;if(b.won)t.wins++;}else if(b.status==="pending")t.pending++;else if(b.status==="unpriced")t.unpriced++;}
+  const net=t.returns-t.stake;
+  return '<tr><td><b>'+label+'</b><div class="small">'+t.wins+' wins · '+t.settled+' settled</div><div class="small">'+t.pending+' pending · '+t.unpriced+' without odds</div></td><td>'+aiBetMoney(t.stake)+'</td><td>'+aiBetMoney(t.returns)+'</td><td style="font-weight:800;color:'+(net>=0?'#287c3e':'#c1272d')+'">'+aiBetMoney(net,true)+'</td></tr>';
+ }).join('')+'</tbody></table></div>';
+}
+function aiBetMatch(row){
+ if(!row)return '<div class="small">Betting odds unavailable for this prediction.</div>';
+ return '<div class="statMiniGrid" style="margin-top:8px">'+[["score","Correct Score"],["result","Match Result"]].map(([market,label])=>{
+  const b=aiBetSettlement(row,market);
+  let details=b.status==="unpriced"?"Odds unavailable":b.status==="pending"?"Odds "+b.odds.toFixed(2)+" · Awaiting result":b.status==="settled"?"Odds "+b.odds.toFixed(2)+" · Return "+aiBetMoney(b.returns)+" · "+aiBetMoney(b.profit,true)+" profit / loss":"No prediction";
+  return '<div class="statMini"><span>'+label+'</span><div class="small" style="margin-top:4px">'+esc(details)+'</div></div>';
+ }).join('')+'</div>';
+}
+
 async function refreshAiTracker(){
  if(!(loggedIn&&me==="Joe"&&pin))return;
  const root=document.getElementById("aiTrackerContent");
  root.innerHTML='<p class="small">Loading AI statistics…</p>';
  const {data,error}=await sb.rpc("get_ai_tracker_with_pin",{p_player:"Joe",p_pin:pin,p_season_key:SEASON_KEY});
  if(error){root.innerHTML='<div class="warn">Could not load AI statistics: '+esc(error.message)+'</div>';return;}
- const d=data||{}, rounds=d.rounds||[];
+ const d=data||{}, rounds=d.rounds||[], betRows=d.betting_rows||[];
+ const betsByFixture=new Map(betRows.map(r=>[r.game_id+":"+r.fixture_index,r]));
  const metrics=[
  ["🏆 Season points",d.season_points||0],["🎯 Exact scores",d.exact_scores||0],
  ["✅ Correct results",d.correct_results||0],["📈 Result accuracy",(d.accuracy_pct||0)+"%"],
@@ -712,10 +748,12 @@ async function refreshAiTracker(){
  return Math.sign(Number(p[0])-Number(p[1]))===Math.sign(Number(r[0])-Number(r[1]))?"+6":"+0";
  };
  root.innerHTML='<div class="statMiniGrid">'+metrics.map(([k,v])=>'<div class="statMini"><span>'+esc(k)+'</span><b>'+esc(v)+'</b></div>').join('')+'</div>'+
+ '<h3>💷 AI Virtual Betting · Season totals</h3><p class="small">£10 per prediction in each market. Settled, priced predictions only. No real bets.</p>'+aiBetSummary(betRows)+
  '<h3>Round-by-round history</h3>'+
  (rounds.length?rounds.map(r=>'<details class="fixtureCompare"><summary><b>'+esc(r.round_label||r.game_id)+'</b> — '+Number(r.points||0)+' pts • '+Number(r.completed||0)+' results • '+Number(r.exacts||0)+' exacts</summary>'+
  '<div class="small" style="margin-top:10px">Locked: '+esc(new Date(r.locked_at).toLocaleString("en-GB"))+'</div>'+
- (r.fixtures||[]).map((f,i)=>{const p=r.predictions?.[i],v=r.results?.[i];return '<div class="statusRow"><div><b>'+esc(f[0])+' v '+esc(f[1])+'</b><div class="small">Al: '+(Array.isArray(p)?esc(p[0])+'–'+esc(p[1]):'—')+' • Actual: '+(Array.isArray(v)?esc(v[0])+'–'+esc(v[1]):'Pending')+'</div></div><b>'+score(p,v)+'</b></div>'}).join('')+'</details>').join(''):'<p class="small">No AI predictions have been locked yet. The experiment starts with the next eligible round; no historical predictions will be fabricated.</p>');
+ aiBetSummary(betRows.filter(b=>b.game_id===r.game_id))+
+ (r.fixtures||[]).map((f,i)=>{const p=r.predictions?.[i],v=r.results?.[i];return '<div style="padding:12px 0;border-bottom:1px solid #eee"><div class="sectionHead"><div><b>'+esc(f[0])+' v '+esc(f[1])+'</b><div class="small">Al: '+(Array.isArray(p)?esc(p[0])+'–'+esc(p[1]):'—')+' • Actual: '+(Array.isArray(v)?esc(v[0])+'–'+esc(v[1]):'Pending')+'</div></div><b>'+score(p,v)+'</b></div>'+aiBetMatch(betsByFixture.get(r.game_id+":"+i))+'</div>'}).join('')+'</details>').join(''):'<p class="small">No AI predictions have been locked yet. The experiment starts with the next eligible round; no historical predictions will be fabricated.</p>');
 }
 
 async function getStatsData(force=false){
