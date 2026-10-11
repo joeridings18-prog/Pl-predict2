@@ -815,9 +815,7 @@ async function refreshStats(force=false){
           <div class="statMini"><span>🔮 Most predicted score</span><b>${esc(p.most_predicted_scoreline||"—")}</b><span>${p.most_predicted_scoreline_uses?`${p.most_predicted_scoreline_uses} times`:""}</span></div>
           <div class="statMini"><span>🥄 Wooden spoons</span><b>${p.wooden_spoons}</b></div>
         </div>
-        <h4 style="margin:16px 0 9px;padding-top:14px;border-top:1px solid #eee">💷 Virtual Betting Stats</h4>
-        <p class="small" style="margin:0 0 10px">£10 per prediction. Biggest wins include the stake. Streaks and averages use settled, priced predictions in kickoff order.</p>
-        <div id="bettingStats-${esc(p.player)}"><p class="small">Loading betting statistics…</p></div>
+        <div id="bettingStats-${esc(p.player)}" style="margin-top:8px"><p class="small">Loading betting statistics…</p></div>
       </div>`).join("");
     await refreshBettingStats();
 
