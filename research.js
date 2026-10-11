@@ -43,12 +43,12 @@ function renderResearch(){
  document.getElementById("researchQuotes").innerHTML='<h3>Saved price history</h3>'+(quotes.length?quotes.map(d=>{const p=d.payload;return '<div class="statusRow"><div><b>'+esc(p.selection)+'</b><div class="small">'+esc(p.match)+' · '+esc(p.bookmaker)+' · '+esc(new Date(p.captured_at).toLocaleString("en-GB"))+'</div><div class="small">'+esc(p.notes||"")+'</div></div><div><b>'+Number(p.odds).toFixed(2)+'</b><div class="small">'+(100/Number(p.odds)).toFixed(1)+'% break-even</div></div></div>';}).join(""):'<p class="small">No price snapshots recorded yet.</p>');
 }
 function renderResearchPilot(){
- const pilot=researchDocs.find(d=>d.key==="note:pilot_liverpool_city_20261011")?.payload;
- if(!pilot)return;
+ const reports=researchDocs.filter(d=>d.key.startsWith("note:")&&Array.isArray(d.payload?.players)&&Array.isArray(d.payload?.markets));
+ for(const {payload:pilot} of reports.slice().reverse()){
  const panel=document.createElement("div");panel.className="card";panel.style="margin:0 0 20px;border:1px solid #ddd;box-shadow:none";
  panel.innerHTML='<h3>'+esc(pilot.title)+'</h3><p><b>'+esc(pilot.status)+'</b></p><p class="small">'+esc(pilot.scope)+'</p><p class="warn">'+esc(pilot.price_status)+'</p>'+
  (pilot.players||[]).map(p=>'<details class="fixtureCompare"><summary><b>'+esc(p.name)+'</b> · '+p.matches.length+' available PL appearances</summary><p class="small">'+esc(p.verification_note||'Original pilot; see verification below.')+'</p><div style="overflow-x:auto"><table class="leader"><thead><tr><th>Market</th><th>Sample counts</th><th>1+ hit</th><th>Unverified Statz price 1+</th><th>Break-even</th></tr></thead><tbody>'+
- pilot.markets.map((market,i)=>{const counts=p.matches.map(m=>m.counts[i]),hits=counts.filter(v=>v>=1).length,odds=p.odds_1_plus[i];return '<tr><td>'+esc(market)+'</td><td>'+counts.join(", ")+'</td><td>'+hits+'/'+counts.length+'</td><td>'+Number(odds).toFixed(2)+'</td><td>'+(100/odds).toFixed(1)+'%</td></tr>';}).join("")+
+ pilot.markets.map((market,i)=>{const counts=p.matches.filter(m=>m.minutes>0&&Number.isInteger(m.counts?.[i])&&m.counts[i]>=0).map(m=>m.counts[i]),hits=counts.filter(v=>v>=1).length,quote=p.odds_1_plus?.[i],odds=Number.isFinite(quote)&&quote>1?quote:null;return '<tr><td>'+esc(market)+'</td><td>'+counts.join(", ")+'</td><td>'+hits+'/'+counts.length+'</td><td>'+(odds==null?'—':odds.toFixed(2))+'</td><td>'+(odds==null?'—':(100/odds).toFixed(1)+'%')+'</td></tr>';}).join("")+
  '</tbody></table></div><p class="small">Original counts and prices from Statz; corroboration is described below. Break-even is 1 ÷ odds; recent hit rates do not establish the probability of the next match.</p>'+
  '<details><summary>Sample dates, opponents and minutes</summary>'+p.matches.map(m=>'<div class="statusRow"><span>'+esc(m.date)+' · '+esc(m.opponent)+' · '+esc(m.venue)+'</span><span>'+m.minutes+' minutes</span></div>').join("")+'</details><p><a href="'+esc(p.source_url)+'" target="_blank" rel="noopener">Source player page</a>'+(p.crosscheck_url?' · <a href="'+esc(p.crosscheck_url)+'" target="_blank" rel="noopener">Cross-check</a>':'')+'</p></details>').join("")+
  (pilot.verification?'<h4>Verification and context</h4>'+[pilot.verification.summary,pilot.verification.longer_sample_note,pilot.verification.price_note,pilot.verification.context].map(s=>'<p class="small">'+esc(s)+'</p>').join("")+'<details><summary>Cross-check sources</summary>'+pilot.verification.sources.map(s=>'<p><a href="'+esc(s.url)+'" target="_blank" rel="noopener">'+esc(s.name)+'</a></p>').join("")+'</details>':'')+
@@ -56,9 +56,10 @@ function renderResearchPilot(){
  (pilot.players||[]).filter(p=>p.longer_matches?.length).map(p=>'<details class="fixtureCompare"><summary>'+esc(p.name)+' · longer sample and missing data</summary><div style="overflow-x:auto"><table class="leader"><thead><tr><th>Date / opponent</th><th>Minutes</th>'+pilot.markets.map(m=>'<th>'+esc(m)+'</th>').join("")+'</tr></thead><tbody>'+p.longer_matches.map(m=>'<tr><td>'+esc(m.date)+' · '+esc(m.opponent)+' · '+esc(m.venue)+'</td><td>'+m.minutes+'</td>'+m.counts.map(v=>'<td>'+(v==null?'—':v)+'</td>').join("")+'</tr>').join("")+'</tbody></table></div><p class="small">— means unavailable, not zero. Older-season rows are contextual evidence.</p></details>').join("")+
  '<p class="small">Research captured '+esc(new Date(pilot.checked_at).toLocaleString("en-GB"))+'. This is the capture time, not the bookmaker price update time.</p><h4>Next checks</h4><ul>'+pilot.next_steps.map(s=>'<li>'+esc(s)+'</li>').join("")+'</ul>';
  document.getElementById("researchContent").prepend(panel);
+ }
 }
-function researchPlayerScreenRows(docs,market,line,minMinutes){
- return docs.filter(d=>d.key.startsWith('note:')&&Array.isArray(d.payload?.players)&&Array.isArray(d.payload?.markets)).flatMap(d=>{
+function researchPlayerScreenRows(docs,market,line,minMinutes,fixtureKey="all"){
+ return docs.filter(d=>d.key.startsWith('note:')&&(fixtureKey==='all'||d.key===fixtureKey)&&Array.isArray(d.payload?.players)&&Array.isArray(d.payload?.markets)).flatMap(d=>{
   const p=d.payload;
   return p.players.flatMap(player=>p.markets.flatMap((name,i)=>{
    if(market!=="all"&&name!==market)return [];
@@ -66,7 +67,7 @@ function researchPlayerScreenRows(docs,market,line,minMinutes){
    const n=samples.length,hits=samples.filter(m=>m.counts[i]>=line).length;
    const quote=(line===1?player.odds_1_plus:line===2?player.odds_2_plus:null)?.[i];
    const odds=Number.isFinite(quote)&&quote>1?quote:null;
-   return [{player:player.name,fixture:p.title,market:name,line,n,hits,odds,breakEven:odds?100/odds:null,minutes:n?samples.reduce((s,m)=>s+m.minutes,0)/n:null,notes:player.verification_note||"See original pilot verification.",checked_at:p.checked_at}];
+   return [{fixtureKey:d.key,player:player.name,fixture:p.title,market:name,line,n,hits,odds,breakEven:odds?100/odds:null,minutes:n?samples.reduce((s,m)=>s+m.minutes,0)/n:null,notes:player.verification_note||"See original pilot verification.",checked_at:p.checked_at}];
   }));
  });
 }
@@ -75,13 +76,13 @@ function renderResearchScreen(){
  const docs=researchDocs.filter(d=>d.key.startsWith('note:')&&Array.isArray(d.payload?.players)&&Array.isArray(d.payload?.markets));
  if(!docs.length)return;
  const markets=[...new Set(docs.flatMap(d=>d.payload.markets))],count=docs.reduce((n,d)=>n+d.payload.players.length,0);
- panel.innerHTML='<h3>Player market screen</h3><p class="small">'+count+' researched player samples across '+docs.length+' match report(s). League-wide coverage is not complete. Prices below are unverified Statz snapshots.</p><label>Market<select id="researchScreenMarket" class="roundPickerSelect"><option value="all">All six markets</option>'+markets.map(m=>'<option '+(m==='Shots on target'?'selected':'')+' value="'+esc(m)+'">'+esc(m)+'</option>').join('')+'</select></label><label>Line<select id="researchScreenLine" class="roundPickerSelect"><option value="1">1+</option><option value="2">2+</option><option value="3">3+ · no price feed</option></select></label><label>Appearance minutes<select id="researchScreenMinutes" class="roundPickerSelect"><option value="0">All played appearances</option><option value="60">60+ minutes only</option></select></label><div id="researchScreenRows"></div><p class="small">Historical frequency and break-even are comparison inputs. They are not a next-match probability or a confirmed edge. Filtering minutes changes the sample; a 60+ minute appearance does not prove the player started.</p>';
+ panel.innerHTML='<h3>Player market screen</h3><p class="small">'+count+' researched player samples across '+docs.length+' match report(s). League-wide coverage is not complete. Prices below are unverified Statz snapshots.</p><label>Fixture<select id="researchScreenFixture" class="roundPickerSelect"><option value="all">All researched fixtures</option>'+docs.map(d=>'<option value="'+esc(d.key)+'">'+esc(d.payload.title)+'</option>').join('')+'</select></label><label>Market<select id="researchScreenMarket" class="roundPickerSelect"><option value="all">All six markets</option>'+markets.map(m=>'<option '+(m==='Shots on target'?'selected':'')+' value="'+esc(m)+'">'+esc(m)+'</option>').join('')+'</select></label><label>Line<select id="researchScreenLine" class="roundPickerSelect"><option value="1">1+</option><option value="2">2+</option><option value="3">3+ · no price feed</option></select></label><label>Appearance minutes<select id="researchScreenMinutes" class="roundPickerSelect"><option value="0">All played appearances</option><option value="60">60+ minutes only</option></select></label><div id="researchScreenRows"></div><p class="small">Historical frequency and break-even are comparison inputs. They are not a next-match probability or a confirmed edge. Filtering minutes changes the sample; a 60+ minute appearance does not prove the player started.</p>';
  document.getElementById("researchContent").prepend(panel);
  const update=()=>{
-  const rows=researchPlayerScreenRows(researchDocs,document.getElementById('researchScreenMarket').value,Number(document.getElementById('researchScreenLine').value),Number(document.getElementById('researchScreenMinutes').value));
+  const rows=researchPlayerScreenRows(researchDocs,document.getElementById('researchScreenMarket').value,Number(document.getElementById('researchScreenLine').value),Number(document.getElementById('researchScreenMinutes').value),document.getElementById('researchScreenFixture').value);
   document.getElementById('researchScreenRows').innerHTML='<div style="overflow-x:auto"><table class="leader"><thead><tr><th>Player / match</th><th>Market</th><th>Historical hit</th><th>Avg minutes</th><th>Unverified price</th><th>Break-even</th></tr></thead><tbody>'+rows.map(r=>'<tr><td>'+esc(r.player)+'<details><summary class="small">Sample context</summary><p class="small">'+esc(r.fixture)+'</p><p class="small">'+esc(r.notes)+'</p></details></td><td>'+esc(r.market)+' '+r.line+'+</td><td>'+(r.n?r.hits+'/'+r.n+' · '+(100*r.hits/r.n).toFixed(0)+'%':'—')+(r.n<5?'<div class="small">Limited sample</div>':'')+'</td><td>'+(r.minutes==null?'—':r.minutes.toFixed(0))+'</td><td>'+(r.odds==null?'—':r.odds.toFixed(2))+'</td><td>'+(r.breakEven==null?'—':r.breakEven.toFixed(1)+'%')+'</td></tr>').join('')+'</tbody></table></div>';
  };
- for(const id of ['researchScreenMarket','researchScreenLine','researchScreenMinutes'])document.getElementById(id).onchange=update;
+ for(const id of ['researchScreenFixture','researchScreenMarket','researchScreenLine','researchScreenMinutes'])document.getElementById(id).onchange=update;
  update();
 }
 function renderResearchGoals(comp,home,away){
