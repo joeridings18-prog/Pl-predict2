@@ -1,0 +1,78 @@
+name: Diagnose Stoke correct-score market (read-only)
+on:
+  push:
+    branches:
+      - diagnose-stoke-correct-score-odds
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect-public-match-pages:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install browser
+        run: |
+          npm install --no-save playwright@1.56.1
+          npx playwright install --with-deps chromium
+      - name: Inspect odds market pages without posting anything
+        shell: bash
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const { chromium } = require('playwright');
+          const matches = [
+            {name:'Bolton vs Stoke',id:'Yqn0rMig',url:'https://www.oddsportal.com/football/h2h/bolton-Or1bBrWD/stoke-city-hSUajdSS/#Yqn0rMig:CS;2'},
+            {name:'Watford vs Stoke',id:'rJq8yEv9',url:'https://www.oddsportal.com/football/h2h/stoke-city-hSUajdSS/watford-UmMRoGzp/#rJq8yEv9:CS;2'},
+            {name:'Stoke vs Sheffield United',id:'xKXtwRFD',url:'https://www.oddsportal.com/football/h2h/sheffield-utd-MeKPSerA/stoke-city-hSUajdSS/#xKXtwRFD:CS;2'}
+          ];
+          (async () => {
+            const browser = await chromium.launch({headless:true});
+            const results=[];
+            for (const m of matches) {
+              const context=await browser.newContext({locale:'en-GB',timezoneId:'Europe/London'});
+              const page=await context.newPage();
+              const responses=[];
+              page.on('response',r=>{
+                try {
+                  const u=new URL(r.url());
+                  if(u.hostname.endsWith('oddsportal.com')&&responses.length<100) {
+                    responses.push({host:u.hostname,path:u.pathname.slice(0,180),status:r.status(),type:(r.headers()['content-type']||'').slice(0,70)});
+                  }
+                }catch{}
+              });
+              const record={name:m.name,id:m.id,url:m.url,status:null,title:'',correctScoreTextVisible:false,responseCount:0,network:[],error:null};
+              try {
+                const nav=await page.goto(m.url,{waitUntil:'domcontentloaded',timeout:30000});
+                record.status=nav?.status()||null;
+                await page.waitForTimeout(5500);
+                record.title=await page.title();
+                const visibleText=await page.locator('body').innerText({timeout:4000}).catch(()=> '');
+                record.correctScoreTextVisible=/correct score/i.test(visibleText);
+                record.contentSample=visibleText.slice(0,300);
+                if(record.status===200) await page.screenshot({path:'stoke-'+m.id+'.png',fullPage:false}).catch(()=>{});
+              }catch(e) { record.error=String(e).slice(0,450) }
+              record.responseCount=responses.length;
+              record.network=responses;
+              results.push(record);
+              console.log(JSON.stringify({name:record.name,status:record.status,correctScoreTextVisible:record.correctScoreTextVisible,error:record.error,network:responses.filter(x=>x.type.includes('json')).slice(0,12)}));
+              await context.close();
+            }
+            await browser.close();
+            fs.writeFileSync('odds-diagnostics.json',JSON.stringify(results,null,2));
+            const summary=results.map(x=> '|'+x.name+'|'+(x.status??'error')+'|'+(x.correctScoreTextVisible?'yes':'no')+'|'+x.responseCount+'|').join('\n');
+            fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY,'## Read-only OddsPortal browser diagnostic\n\n|Match|HTTP status|Correct Score visible|Responses|\n|---|---:|---|---:|\n'+summary+'\n');
+          })().catch(e=>{console.error(e);process.exitCode=1});
+          NODE
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: stoke-odds-browser-diagnostic
+          path: |
+            odds-diagnostics.json
+            stoke-*.png
+          if-no-files-found: ignore
