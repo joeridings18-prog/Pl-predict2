@@ -116,6 +116,7 @@ details.predictionCard[open]>summary::after{transform:rotate(180deg)}
   <button id="gameViewBtn" class="viewTab active" type="button">⚽ Gameweek</button>
   <button id="matchViewBtn" class="viewTab hidden" type="button">⚽ Predictions Hub</button>
   <button id="statsViewBtn" class="viewTab" type="button">📊 Stats & Records</button>
+  <button id="recapViewBtn" class="viewTab hidden" type="button">🔒 Gameweek Recap</button>
   <button id="aiViewBtn" class="viewTab hidden" type="button">🔒 AI Tracker</button>
   <button id="researchViewBtn" class="viewTab hidden" type="button">🔒 Research</button>
   <button id="betViewBtn" class="viewTab" type="button">💷 Virtual Betting</button>
@@ -191,6 +192,7 @@ details.predictionCard[open]>summary::after{transform:rotate(180deg)}
 
 <div id="matchView" class="hidden"><div class="statsHero"><h2>⚽ Predictions Hub</h2><div class="small">All predictions, live and final scores, provisional standings and previous rounds in one place.</div></div><div class="card"><div class="gwNav"><select id="matchRoundSelect" aria-label="Predictions Hub round" style="width:100%;padding:12px"></select></div><button class="submit" id="refreshMatchBtn" type="button">↻ Refresh Predictions Hub</button><div id="matchContent" style="margin-top:14px">Choose a round to see matches.</div></div></div>
 <div id="betView" class="hidden"><div class="statsHero"><h2>💷 Virtual Betting Tracker</h2><div class="small">£10-per-prediction trackers for correct scores and match results. Predictions appear after the reveal deadline. No real bets.</div></div><div id="betContent" class="card"><p class="small">Loading virtual results…</p></div></div>
+<div id="recapView" class="hidden"><div class="statsHero"><h2>📰 Gameweek Recap</h2><div class="small">Joe-only preview · Review the first week before sharing.</div></div><div class="card"><label for="recapRoundSelect" class="roundPickerLabel">Choose a round</label><select id="recapRoundSelect" class="roundPickerSelect"></select><button id="refreshRecapBtn" type="button" class="submit">↻ Refresh recap</button></div><div id="recapContent"></div></div>
 <div id="researchView" class="hidden"><div class="statsHero"><h2>🔒 Match Research</h2><div class="small">Joe’s private player-prop and team-goals research.</div></div><div id="researchContent" class="card"></div></div>
 <div id="aiView" class="hidden">
 <div class="statsHero"><h2>🔒 Al's AI Tracker</h2><div class="small">Private season-long prediction experiment. Predictions are locked before kickoff.</div></div>
@@ -564,6 +566,8 @@ async function saveResults(){
 
 function updateAiAccess(){
  const allowed=loggedIn&&me==="Joe";
+ document.getElementById("recapViewBtn").classList.toggle("hidden",!allowed);
+ if(!allowed){recapRequest++;document.getElementById("recapContent").innerHTML="";if(!document.getElementById("recapView").classList.contains("hidden"))showView("game");}
  document.getElementById("researchViewBtn").classList.toggle("hidden",!allowed);
  if(!allowed){researchClear();if(!document.getElementById("researchView").classList.contains("hidden"))showView("game");}
  document.getElementById("aiViewBtn").classList.toggle("hidden",!allowed);
@@ -578,27 +582,139 @@ function showView(view){
  if(matchAutoTimer){clearInterval(matchAutoTimer);matchAutoTimer=null;}
  const ai=view==="ai"&&loggedIn&&me==="Joe";
  const research=view==="research"&&loggedIn&&me==="Joe";
+ const recap=view==="recap"&&recapAllowed();
+ document.getElementById("recapView").classList.toggle("hidden",!recap);
+ document.getElementById("recapViewBtn").classList.toggle("active",recap);
  const bet=view==="bet";
  const stats=view==="stats";
  const match=view==="match"&&loggedIn;
- document.getElementById("gameView").classList.toggle("hidden",ai||stats||match||bet||research);
+ document.getElementById("gameView").classList.toggle("hidden",ai||stats||match||bet||research||recap);
  document.getElementById("researchView").classList.toggle("hidden",!research);
  document.getElementById("researchViewBtn").classList.toggle("active",research);
  document.getElementById("statsView").classList.toggle("hidden",!stats);
  document.getElementById("matchView").classList.toggle("hidden",!match);
  document.getElementById("aiView").classList.toggle("hidden",!ai);
  document.getElementById("betView").classList.toggle("hidden",!bet);
- document.getElementById("gameViewBtn").classList.toggle("active",!ai&&!stats&&!match&&!bet&&!research);
+ document.getElementById("gameViewBtn").classList.toggle("active",!ai&&!stats&&!match&&!bet&&!research&&!recap);
  document.getElementById("statsViewBtn").classList.toggle("active",stats);
  document.getElementById("aiViewBtn").classList.toggle("active",ai);
  document.getElementById("matchViewBtn").classList.toggle("active",match);
  document.getElementById("betViewBtn").classList.toggle("active",bet);
+ if(recap)refreshRecap();
  if(stats)refreshStats();
  if(ai)refreshAiTracker();
  if(research)refreshResearch();
  if(bet)refreshVirtualBetting();
  if(match){refreshMatchCentre();matchAutoTimer=setInterval(()=>{if(!document.hidden&&loggedIn&&!document.getElementById("matchView").classList.contains("hidden"))refreshMatchCentre(true);},120000);}
 }
+
+let recapRequest=0;
+function recapAllowed(){return loggedIn&&me==="Joe"&&!!pin;}
+function recapValidScore(v){return Array.isArray(v)&&v.length===2&&v.every(x=>x!==null&&x!==""&&Number.isInteger(Number(x))&&Number(x)>=0);}
+function recapPoints(p,r){
+ if(!recapValidScore(p)||!recapValidScore(r))return 0;
+ if(Number(p[0])===Number(r[0])&&Number(p[1])===Number(r[1]))return 16;
+ return Math.sign(Number(p[0])-Number(p[1]))===Math.sign(Number(r[0])-Number(r[1]))?6:0;
+}
+function recapRound(g,results,predictions){
+ const scores=Object.fromEntries(results.filter(r=>recapValidScore([r.home_score,r.away_score])).map(r=>[Number(r.fixture_index),[Number(r.home_score),Number(r.away_score)]]));
+ const picks=Object.fromEntries(predictions.filter(p=>PLAYERS.includes(p.player)).map(p=>[p.player,p.predictions]));
+ const players=PLAYERS.map(player=>{
+  let points=0,exacts=0,correct=0;
+  (g.fixtures||[]).forEach((f,i)=>{const pts=recapPoints(picks[player]?.[i],scores[i]);points+=pts;if(pts===16)exacts++;if(pts>0)correct++;});
+  return {player,points,exacts,correct};
+ });
+ const completed=(g.fixtures||[]).filter((f,i)=>recapValidScore(scores[i])).length;
+ return {g,scores,picks,players,completed,finished:g.fixtures?.length>0&&completed===g.fixtures.length};
+}
+function recapBets(rows){
+ const totals=Object.fromEntries(PLAYERS.map(p=>[p,{score:{net:0,count:0},result:{net:0,count:0}}]));
+ const biggest={score:[],result:[]};
+ for(const row of rows){
+  if(!PLAYERS.includes(row.player)||!recapValidScore(row.prediction)||!recapValidScore(row.actual))continue;
+  for(const market of ["score","result"]){
+   const odds=Number(market==="score"?row.odds:row.result_odds);
+   if(!Number.isFinite(odds)||odds<=1)continue;
+   const pts=recapPoints(row.prediction,row.actual),won=market==="score"?pts===16:pts>0;
+   const returns=won?10*odds:0,t=totals[row.player][market];
+   t.net+=returns-10;t.count++;
+   if(won){
+    const best=biggest[market][0]?.returns||0;
+    if(returns>best)biggest[market]=[{...row,odds,returns}];
+    else if(Math.abs(returns-best)<0.000001)biggest[market].push({...row,odds,returns});
+   }
+  }
+ }
+ return {totals,biggest};
+}
+function recapMoney(n,signed=false){return (signed?(n>=0?"+":"−"):"")+"£"+Math.abs(n).toFixed(2);}
+function renderRecapReport(round,history,betRows,betError){
+ const {g,players,picks,scores}=round,sorted=[...players].sort((a,b)=>b.points-a.points||a.player.localeCompare(b.player));
+ const winners=sorted.filter(p=>p.points===sorted[0].points),spoons=sorted.filter(p=>p.points===sorted[sorted.length-1].points);
+ const names=ps=>ps.map(p=>esc(p.player)).join(" & ");
+ if(!round.finished)return '<div class="notice"><h2 style="margin-top:0">The final whistle has not gone yet…</h2><p>'+esc(g.round_label||g.gameweek)+' has '+round.completed+' / '+g.fixtures.length+' recorded results.</p><div class="small">The recap appears when every fixture has a result. No winner or wooden spoon is awarded early.</div></div>';
+ const margin=sorted[0].points-sorted[1].points;
+ let html='<div class="card"><span class="pill">'+esc(g.round_label||g.gameweek)+' · Final recap</span><h2>'+ (winners.length===PLAYERS.length?'All square — and spoons all round!':names(winners)+(winners.length>1?' share the glory':' takes the glory')+', '+names(spoons)+(spoons.length>1?' share the spoons!':' takes the spoon!'))+'</h2><p>'+
+ (winners.length>1?names(winners)+' finish level on '+sorted[0].points+' points.':names(winners)+' wins with '+sorted[0].points+' points, '+winners[0].exacts+' exact score'+(winners[0].exacts===1?'':'s')+' and a '+margin+'-point cushion.')+
+ '</p><p>🥄 '+names(spoons)+(spoons.length>1?' share':' gets')+' the wooden spoon on '+spoons[0].points+' points. '+(spoons.length===PLAYERS.length?'Nobody escapes this week.':spoons.length>1?'Plenty of company at the wrong end of the table.':'Something for the mantelpiece… until the next round!')+'</p>'+
+ '<table class="leader"><thead><tr><th>Player</th><th>Points</th><th>Exact</th><th>Correct result</th></tr></thead><tbody>'+sorted.map(p=>'<tr><td><b>'+esc(p.player)+'</b></td><td>'+p.points+'</td><td>'+p.exacts+'</td><td>'+p.correct+'</td></tr>').join('')+'</tbody></table><p class="small">Correct results include exact scores. Exact = 16 points; other correct result = 6.</p></div>';
+ const exacts=(g.fixtures||[]).map((f,i)=>({f,i,players:PLAYERS.filter(p=>recapPoints(picks[p]?.[i],scores[i])===16)})).filter(x=>x.players.length);
+ exacts.sort((a,b)=>a.players.length-b.players.length||a.i-b.i);
+ html+='<div class="card"><h3>🎯 Prediction of the week</h3>'+ (exacts.length?exacts.filter(x=>x.players.length===exacts[0].players.length).map(x=>'<p><b>'+x.players.map(esc).join(' & ')+'</b> nailed '+esc(x.f[0])+' '+esc(scores[x.i].join('–'))+' '+esc(x.f[1])+'. '+(x.players.length===1?'The only player to get it exactly right!':'Shared honours — '+x.players.length+' players got it exactly right.')+'</p>').join(''):'<p>No exact scores this round. The elusive 16-pointer stays elusive.</p>')+'</div>';
+ const before=Object.fromEntries(PLAYERS.map(p=>[p,0])),after={...before};
+ const ordered=[...history].sort((a,b)=>Date.parse(a.g.reveal_at)-Date.parse(b.g.reveal_at)||String(a.g.id).localeCompare(String(b.g.id)));
+ for(const r of ordered){
+  if(r.g.id===g.id)break;
+  if(r.finished)for(const p of r.players)before[p.player]+=p.points;
+ }
+ for(const p of players)after[p.player]=before[p.player]+p.points;
+ const rank=(totals,p)=>1+PLAYERS.filter(other=>totals[other]>totals[p]).length;
+ const tableOrder=[...PLAYERS].sort((a,b)=>after[b]-after[a]||a.localeCompare(b));
+ const leaders=tableOrder.filter(p=>after[p]===after[tableOrder[0]]),next=tableOrder.find(p=>after[p]<after[tableOrder[0]]);
+ html+='<div class="card"><h3>📊 The season picture</h3><p>'+leaders.map(esc).join(' & ')+(leaders.length>1?' share the lead':' leads')+' on '+after[tableOrder[0]]+' points.'+(next?' The gap to the next player is '+(after[tableOrder[0]]-after[next])+' points.':' Everyone is level.')+'</p><table class="leader"><thead><tr><th>Player</th><th>Position</th><th>Movement</th><th>Points</th></tr></thead><tbody>'+tableOrder.map(p=>{
+  const movement=rank(before,p)-rank(after,p);
+  return '<tr><td><b>'+esc(p)+'</b></td><td>'+rank(after,p)+'</td><td>'+(movement>0?'↑ '+movement:movement<0?'↓ '+Math.abs(movement):'—')+'</td><td>'+after[p]+'</td></tr>';
+ }).join('')+'</tbody></table><p class="small">Snapshot through this round, using completed rounds in reveal order. Tied points share a position; later rounds are excluded.</p></div>';
+ html+='<div class="card"><h3>💰 Virtual betting highlights</h3>';
+ if(betError)return html+'<div class="warn">Betting data could not be loaded. Refresh to try again.</div></div>';
+ const bets=recapBets(betRows.filter(r=>String(r.game_id)===String(g.id)));
+ for(const [market,label] of [["score","Correct Score"],["result","Match Result"]]){
+  html+='<h4>'+label+' — biggest winning return</h4>';
+  html+=bets.biggest[market].length?bets.biggest[market].map(r=>{
+   const diff=Number(r.prediction[0])-Number(r.prediction[1]),pick=market==="score"?r.prediction.join('–'):diff>0?r.home+' win':diff<0?r.away+' win':'Draw';
+   return '<p><b>'+esc(r.player)+' · '+recapMoney(r.returns)+' return</b> ('+recapMoney(r.returns-10,true)+' profit) on '+esc(r.home)+' v '+esc(r.away)+' — '+esc(pick)+' at '+r.odds.toFixed(2)+'.</p>';
+  }).join(''):'<p class="small">No priced winning bets in this market this round.</p>';
+ }
+ html+='<table class="leader"><thead><tr><th>Player</th><th>Correct Score</th><th>Match Result</th></tr></thead><tbody>'+PLAYERS.map(p=>'<tr><td><b>'+esc(p)+'</b></td>'+["score","result"].map(m=>'<td>'+ (bets.totals[p][m].count?recapMoney(bets.totals[p][m].net,true):'—')+'</td>').join('')+'</tr>').join('')+'</tbody></table><p class="small">Weekly profit / loss at £10 per prediction in each market. Missing odds are excluded; — means no priced settled bets. No real bets.</p></div>';
+ return html;
+}
+async function refreshRecap(){
+ if(!recapAllowed())return;
+ const request=++recapRequest,select=document.getElementById("recapRoundSelect"),root=document.getElementById("recapContent");
+ const eligible=games.filter(g=>!g.season_key||g.season_key===SEASON_KEY).sort((a,b)=>Date.parse(b.reveal_at)-Date.parse(a.reveal_at));
+ const previous=select.value||game?.id;
+ select.innerHTML=eligible.map(g=>'<option value="'+esc(g.id)+'">'+esc(g.round_label||g.gameweek)+'</option>').join('');
+ select.value=eligible.some(g=>g.id===previous)?previous:eligible[0]?.id||"";
+ const g=eligible.find(x=>x.id===select.value);
+ if(!g){root.textContent="No rounds available yet.";return;}
+ if(!(Date.now()>=Date.parse(g.reveal_at))){root.innerHTML='<div class="notice">The recap will be available after predictions are revealed and every fixture has a recorded result.</div>';return;}
+ root.innerHTML='<p class="small">Putting the week into words…</p>';
+ try{
+  const historyGames=eligible.filter(x=>Date.parse(x.reveal_at)<=Date.parse(g.reveal_at));
+  const [history,bet]=await Promise.all([
+   Promise.all(historyGames.map(async x=>{
+    const [results,predictions]=await Promise.all([sb.rpc("get_game_results",{p_game_id:x.id}),sb.rpc("revealed_predictions",{p_game_id:x.id})]);
+    if(results.error||predictions.error)throw results.error||predictions.error;
+    return recapRound(x,results.data||[],predictions.data||[]);
+   })),
+   sb.rpc("get_virtual_betting_public",{p_season_key:SEASON_KEY})
+  ]);
+  if(request!==recapRequest||!recapAllowed())return;
+  const round=history.find(x=>x.g.id===g.id);
+  root.innerHTML=renderRecapReport(round,history,bet.data?.rows||[],bet.error);
+ }catch(e){if(request===recapRequest&&recapAllowed())root.innerHTML='<div class="warn">Could not load the recap: '+esc(e.message||e)+'</div>';}
+}
+
 let virtualBetRows=[];
 let virtualBetRound="";
 let virtualBetMarket="score";
@@ -961,6 +1077,9 @@ document.getElementById("matchRoundSelect").onchange=refreshMatchCentre;
 document.getElementById("aiViewBtn").onclick=()=>showView("ai");
 document.getElementById("researchViewBtn").onclick=()=>showView("research");
 document.getElementById("betViewBtn").onclick=()=>showView("bet");
+document.getElementById("recapViewBtn").onclick=()=>showView("recap");
+document.getElementById("refreshRecapBtn").onclick=refreshRecap;
+document.getElementById("recapRoundSelect").onchange=refreshRecap;
 document.getElementById("notifyBtn").addEventListener("click",async()=>{const out=document.getElementById("notifyStatus");if(!("Notification" in window)){out.textContent="Notifications are not supported in this browser.";return;}try{const permission=await Notification.requestPermission();out.textContent=permission==="granted"?"Notifications allowed. Push delivery is not configured yet.":permission==="denied"?"Notifications blocked in browser settings.":"Notification permission not granted.";}catch(err){out.textContent="Notification permission failed: "+err.message;}});
 document.getElementById("testNotifyBtn").addEventListener("click",async()=>{const out=document.getElementById("notifyStatus");try{if(!("serviceWorker" in navigator)||!("Notification" in window))throw Error("Notifications are not supported on this browser.");if(Notification.permission!=="granted")throw Error("Tap Enable Notifications first.");const reg=await navigator.serviceWorker.register("./sw.js",{scope:"./"});await navigator.serviceWorker.ready;await reg.showNotification("PL Predict test ⚽",{body:"Great! Notifications are working on this device.",tag:"pl-test",data:{url:"./"}});out.textContent="✅ Test notification requested. Check your Android notification panel.";}catch(err){out.textContent="⚠️ "+err.message;}});
 const VAPID_PUBLIC="BBXjfdKCoI2Yu7t_Who8CnVy_SIWs62JTJjm20k_FbayozSc2LadnZ6YMca2GRiuE2tq_AB5fKtInd120ockUd4";
