@@ -1009,7 +1009,7 @@ async function refreshLeaderboard(){
   const spoonHolders=new Set(statsResp.data?.current_spoon_holders||[]);
   const mm=Object.fromEntries((m.data||[]).map(x=>[x.player,x]));
   const ss=Object.fromEntries((s.data||[]).map(x=>[x.player,x]));
-  const sorted=[...PLAYERS].sort((a,b)=>(ss[b]?.points||0)-(ss[a]?.points||0)||(mm[b]?.points||0)-(mm[a]?.points||0));
+  const sorted=[...PLAYERS].sort((a,b)=>(mm[b]?.points||0)-(mm[a]?.points||0)||(ss[b]?.points||0)-(ss[a]?.points||0));
   document.getElementById("leaderboard").innerHTML=sorted.map(p=>`<tr><td><b>${esc(p)}${spoonHolders.has(p)?" 🥄":""}</b></td><td>${mm[p]?.points||0}</td><td><b>${ss[p]?.points||0}</b></td></tr>`).join("");
 }
 
