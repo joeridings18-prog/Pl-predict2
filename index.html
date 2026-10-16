@@ -136,7 +136,7 @@ details.predictionCard[open]>summary::after{transform:rotate(180deg)}
 <p class="small">The monthly column automatically starts from zero for each new month. Season points keep accumulating across 2026/27.</p>
 </div>
 
-<div id="notice" class="notice">Loading game…</div><div class="card"><h2>🔔 Phone reminders</h2><p class="small">Step 1: allow notifications on this device. Scheduled push reminders will be enabled after delivery testing.</p><button id="notifyBtn" class="submit" type="button">Enable Notifications</button><p id="notifyStatus" class="small"></p><button id="subscribePushBtn" class="submit" type="button" style="margin-top:8px">📲 Register This Phone</button><button id="testNotifyBtn" class="submit" type="button" style="margin-top:8px">🧪 Send Test Notification</button></div>
+<div id="notice" class="notice">Loading game…</div>
 
 <div class="card">
 <h2 style="margin-top:0">1. Choose your name</h2>
@@ -151,6 +151,8 @@ details.predictionCard[open]>summary::after{transform:rotate(180deg)}
 </div>
 <div id="loginStatus" class="small" style="margin-top:8px"></div>
 </div>
+
+<div class="card" id="pushReminderCard"><h2 style="margin-top:0">🔔 Prediction reminders</h2><p class="small">Reminders 24 hours and 2 hours before each deadline, only while you have predictions missing. Set up once on each phone.</p><p id="notifyStatus" class="small" role="status">Log in with your name and PIN to set up this phone.</p><button id="subscribePushBtn" class="submit" type="button">Enable automatic reminders</button><button id="testNotifyBtn" class="submit hidden" type="button" style="margin-top:8px">Send test notification</button><button id="stopPushBtn" class="viewTab hidden" type="button" style="margin-top:8px;width:100%">Turn off reminders on this phone</button></div>
 
 <details id="predictionDetails" class="predictionCard" open>
 <summary><h2>2. Enter your predictions</h2></summary>
@@ -565,6 +567,7 @@ async function saveResults(){
 
 
 function updateAiAccess(){
+ refreshPushStatus();
  const allowed=loggedIn&&me==="Joe";
  document.getElementById("recapViewBtn").classList.toggle("hidden",!allowed);
  if(!allowed){recapRequest++;document.getElementById("recapContent").innerHTML="";if(!document.getElementById("recapView").classList.contains("hidden"))showView("game");}
@@ -1080,29 +1083,74 @@ document.getElementById("betViewBtn").onclick=()=>showView("bet");
 document.getElementById("recapViewBtn").onclick=()=>showView("recap");
 document.getElementById("refreshRecapBtn").onclick=refreshRecap;
 document.getElementById("recapRoundSelect").onchange=refreshRecap;
-document.getElementById("notifyBtn").addEventListener("click",async()=>{const out=document.getElementById("notifyStatus");if(!("Notification" in window)){out.textContent="Notifications are not supported in this browser.";return;}try{const permission=await Notification.requestPermission();out.textContent=permission==="granted"?"Notifications allowed. Push delivery is not configured yet.":permission==="denied"?"Notifications blocked in browser settings.":"Notification permission not granted.";}catch(err){out.textContent="Notification permission failed: "+err.message;}});
-document.getElementById("testNotifyBtn").addEventListener("click",async()=>{const out=document.getElementById("notifyStatus");try{if(!("serviceWorker" in navigator)||!("Notification" in window))throw Error("Notifications are not supported on this browser.");if(Notification.permission!=="granted")throw Error("Tap Enable Notifications first.");const reg=await navigator.serviceWorker.register("./sw.js",{scope:"./"});await navigator.serviceWorker.ready;await reg.showNotification("PL Predict test ⚽",{body:"Great! Notifications are working on this device.",tag:"pl-test",data:{url:"./"}});out.textContent="✅ Test notification requested. Check your Android notification panel.";}catch(err){out.textContent="⚠️ "+err.message;}});
-const VAPID_PUBLIC="BBXjfdKCoI2Yu7t_Who8CnVy_SIWs62JTJjm20k_FbayozSc2LadnZ6YMca2GRiuE2tq_AB5fKtInd120ockUd4";
+
+const PUSH_ENDPOINT="https://ekbwbibmicqfrompglyq.supabase.co/functions/v1/push-register";
 function urlBase64ToUint8Array(value){const base64=(value+"=".repeat((4-value.length%4)%4)).replace(/-/g,"+").replace(/_/g,"/");return Uint8Array.from(atob(base64),c=>c.charCodeAt(0));}
+function pushSupported(){return "serviceWorker" in navigator&&"PushManager" in window&&"Notification" in window;}
+function pushButtons(active){
+ document.getElementById("subscribePushBtn").classList.toggle("hidden",active);
+ document.getElementById("testNotifyBtn").classList.toggle("hidden",!active);
+ document.getElementById("stopPushBtn").classList.toggle("hidden",!active);
+}
+async function pushRequest(action,subscription){
+ const response=await fetch(PUSH_ENDPOINT,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action,player:me,pin,endpoint:subscription?.endpoint,subscription:action==="register"?subscription?.toJSON():undefined})});
+ const data=await response.json();if(!response.ok||!data.ok)throw Error(data.error||"Notification request failed.");return data;
+}
+async function currentPhoneSubscription(){const reg=await navigator.serviceWorker.getRegistration("./");return reg?await reg.pushManager.getSubscription():null;}
+async function refreshPushStatus(){
+ const player=me,out=document.getElementById("notifyStatus");pushButtons(false);
+ if(!pushSupported()){out.textContent="This browser does not support push notifications. On iPhone, add this site to your Home Screen and open it there.";return;}
+ if(!loggedIn||!pin){out.textContent="Log in with your name and PIN to set up this phone.";return;}
+ if(Notification.permission==="denied"){out.textContent="Notifications are blocked. Allow them in this browser’s site settings, then try again.";return;}
+ try{
+  const sub=await currentPhoneSubscription();
+  if(!sub){out.textContent="Enable reminders once on this phone. They can arrive while the website is closed.";return;}
+  const result=await pushRequest("status",sub);
+  if(player!==me)return;
+  pushButtons(result.registered);
+  out.textContent=result.registered?"✅ Automatic reminders are enabled on this phone. Send a test to check delivery.":"This phone needs registering with the updated reminder service. Tap Enable automatic reminders.";
+ }catch{out.textContent="Could not check this phone. Tap Enable automatic reminders to reconnect.";}
+}
 document.getElementById("subscribePushBtn").addEventListener("click",async()=>{
  const out=document.getElementById("notifyStatus"),btn=document.getElementById("subscribePushBtn");btn.disabled=true;
  try{
-  if(!loggedIn||!me||!pin)throw Error("Log in with your player PIN first.");
-  if(!("serviceWorker" in navigator)||!("PushManager" in window))throw Error("Push notifications aren't supported in this browser.");
-  if(Notification.permission!=="granted")throw Error("Enable Notifications first.");
-  const reg=await navigator.serviceWorker.register("./sw.js",{scope:"./"});
-  await navigator.serviceWorker.ready;
-  const subscription=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:urlBase64ToUint8Array(VAPID_PUBLIC)});
-  const response=await fetch("https://ekbwbibmicqfrompglyq.supabase.co/functions/v1/push-register",{
-   method:"POST",headers:{"Content-Type":"application/json"},
-   body:JSON.stringify({player:me,pin,subscription:subscription.toJSON()})
-  });
-  const result=await response.json();
-  if(!response.ok||!result.ok)throw Error(result.error||"Could not register device.");
-  out.textContent="✅ This phone is registered for future remote push notifications. Scheduled delivery is not enabled yet.";
+  if(!loggedIn||!me||!pin)throw Error("Log in with your player name and PIN first.");
+  if(!pushSupported())throw Error("This browser does not support push notifications. On iPhone, use the Home Screen app.");
+  const permission=Notification.permission==="granted"?"granted":await Notification.requestPermission();
+  if(permission!=="granted")throw Error("Allow notifications in your browser settings to receive reminders.");
+  out.textContent="Registering this phone…";
+  const response=await fetch(PUSH_ENDPOINT,{cache:"no-store"}),settings=await response.json();
+  if(!response.ok||!settings.publicKey)throw Error("Reminder service unavailable. Please try again.");
+  await navigator.serviceWorker.register("./sw.js",{scope:"./"});
+  const reg=await navigator.serviceWorker.ready,key=urlBase64ToUint8Array(settings.publicKey);
+  let sub=await reg.pushManager.getSubscription();
+  if(sub){
+   const previous=sub.options.applicationServerKey;
+   const bytes=previous?new Uint8Array(previous):null;
+   if(!bytes||bytes.length!==key.length||bytes.some((v,i)=>v!==key[i])){await sub.unsubscribe();sub=null;}
+  }
+  if(!sub)sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:key});
+  await pushRequest("register",sub);pushButtons(true);
+  out.textContent="✅ Automatic reminders enabled. Tap Send test notification and check your phone’s notification panel.";
  }catch(e){out.textContent="⚠️ "+(e.message||e);}
  finally{btn.disabled=false;}
 });
+document.getElementById("testNotifyBtn").addEventListener("click",async()=>{
+ const out=document.getElementById("notifyStatus"),btn=document.getElementById("testNotifyBtn");btn.disabled=true;
+ try{
+  if(!loggedIn||!pin)throw Error("Log in first.");
+  const sub=await currentPhoneSubscription();if(!sub)throw Error("Enable automatic reminders first.");
+  out.textContent="Sending a remote push…";await pushRequest("test",sub);
+  out.textContent="✅ Push service accepted the test. Check your phone’s notification panel, including when this tab is closed.";
+ }catch(e){out.textContent="⚠️ "+(e.message||e);}
+ finally{btn.disabled=false;}
+});
+document.getElementById("stopPushBtn").addEventListener("click",async()=>{
+ const out=document.getElementById("notifyStatus");
+ try{const sub=await currentPhoneSubscription();if(sub){await pushRequest("unsubscribe",sub);await sub.unsubscribe();}pushButtons(false);out.textContent="Reminders are off on this phone.";}
+ catch(e){out.textContent="⚠️ "+(e.message||e);}
+});
+
 start();
 // Automatic refresh disabled so form inputs can never be redrawn while Joe is typing.
 </script>
