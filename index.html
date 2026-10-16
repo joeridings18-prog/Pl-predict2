@@ -109,6 +109,9 @@ details.predictionCard[open]>summary::after{transform:rotate(180deg)}
 .roundPickerEmbedded .roundPickerTop strong{font-size:16px}
 .betRow{padding:12px 0;border-bottom:1px solid #eee;line-height:1.6}.betRow:last-child{border-bottom:0}
 .viewTabs{grid-template-columns:repeat(2,minmax(0,1fr))}.viewTab{white-space:normal;font-size:13px}
+#groupForm label{display:block;margin:10px 0;font-size:14px;font-weight:700}
+#groupForm input:not([type=checkbox]),#groupForm select{display:block;width:100%;max-width:100%;margin-top:6px;padding:11px;border:1px solid #ccc;border-radius:9px;font:inherit;background:#fff;min-width:0}
+#groupForm fieldset{min-width:0}#groupForm legend{padding:0 6px}
 @media(max-width:520px){.viewTabs{display:flex;overflow-x:auto}.viewTab{min-width:135px;flex:0 0 auto}}
 </style>
 </head>
@@ -124,6 +127,7 @@ details.predictionCard[open]>summary::after{transform:rotate(180deg)}
   <button id="aiViewBtn" class="viewTab hidden" type="button">🔒 AI Tracker</button>
   <button id="researchViewBtn" class="viewTab hidden" type="button">🔒 Research</button>
   <button id="betViewBtn" class="viewTab" type="button">💷 Virtual Betting</button>
+  <button id="groupViewBtn" class="viewTab" type="button">🤝 Group Bet</button>
 </div>
 
 <div id="gameView">
@@ -197,6 +201,7 @@ details.predictionCard[open]>summary::after{transform:rotate(180deg)}
 </div>
 
 <div id="matchView" class="hidden"><div class="statsHero"><h2>⚽ Predictions Hub</h2><div class="small">All predictions, live and final scores, provisional standings and previous rounds in one place.</div></div><div class="card"><div class="gwNav"><select id="matchRoundSelect" aria-label="Predictions Hub round" style="width:100%;padding:12px"></select></div><button class="submit" id="refreshMatchBtn" type="button">↻ Refresh Predictions Hub</button><div id="matchContent" style="margin-top:14px">Choose a round to see matches.</div></div></div>
+<div id="groupView" class="hidden"><div class="statsHero"><h2>🤝 Group Bet</h2><div class="small">Four people. Four teams. Two four-folds. Your shared picks, results and money record.</div></div><div id="groupContent"></div></div>
 <div id="betView" class="hidden"><div class="statsHero"><h2>💷 Virtual Betting Tracker</h2><div class="small">£10-per-prediction trackers for correct scores and match results. Predictions appear after the reveal deadline. No real bets.</div></div><div id="betContent" class="card"><p class="small">Loading virtual results…</p></div></div>
 <div id="recapView" class="hidden"><div class="statsHero"><h2>📰 Gameweek Recap</h2><div class="small">Joe-only preview · Review the first week before sharing.</div></div><div class="card"><label for="recapRoundSelect" class="roundPickerLabel">Choose a round</label><select id="recapRoundSelect" class="roundPickerSelect"></select><button id="refreshRecapBtn" type="button" class="submit">↻ Refresh recap</button></div><div id="recapContent"></div></div>
 <div id="researchView" class="hidden"><div class="statsHero"><h2>🔒 Match Research</h2><div class="small">Joe’s private player-prop and team-goals research.</div></div><div id="researchContent" class="card"></div></div>
@@ -232,6 +237,7 @@ details.predictionCard[open]>summary::after{transform:rotate(180deg)}
 </div>
 
 <script src="./research.js?v=research-expanded-six-markets-20261011"></script>
+<script src="./group-bet.js?v=20261016-1"></script>
 <script>
 const SUPABASE_URL="https://ekbwbibmicqfrompglyq.supabase.co";
 const SUPABASE_KEY="sb_publishable_3_9tReCoYfbZG5if1PKAPQ_am8pb55g";
@@ -590,19 +596,22 @@ function showView(view){
  const ai=view==="ai"&&loggedIn&&me==="Joe";
  const research=view==="research"&&loggedIn&&me==="Joe";
  const recap=view==="recap"&&recapAllowed();
+ const group=view==="group";
+ document.getElementById("groupView").classList.toggle("hidden",!group);
+ document.getElementById("groupViewBtn").classList.toggle("active",group);
  document.getElementById("recapView").classList.toggle("hidden",!recap);
  document.getElementById("recapViewBtn").classList.toggle("active",recap);
  const bet=view==="bet";
  const stats=view==="stats";
  const match=view==="match"&&loggedIn;
- document.getElementById("gameView").classList.toggle("hidden",ai||stats||match||bet||research||recap);
+ document.getElementById("gameView").classList.toggle("hidden",ai||stats||match||bet||research||recap||group);
  document.getElementById("researchView").classList.toggle("hidden",!research);
  document.getElementById("researchViewBtn").classList.toggle("active",research);
  document.getElementById("statsView").classList.toggle("hidden",!stats);
  document.getElementById("matchView").classList.toggle("hidden",!match);
  document.getElementById("aiView").classList.toggle("hidden",!ai);
  document.getElementById("betView").classList.toggle("hidden",!bet);
- document.getElementById("gameViewBtn").classList.toggle("active",!ai&&!stats&&!match&&!bet&&!research&&!recap);
+ document.getElementById("gameViewBtn").classList.toggle("active",!ai&&!stats&&!match&&!bet&&!research&&!recap&&!group);
  document.getElementById("statsViewBtn").classList.toggle("active",stats);
  document.getElementById("aiViewBtn").classList.toggle("active",ai);
  document.getElementById("matchViewBtn").classList.toggle("active",match);
@@ -612,6 +621,7 @@ function showView(view){
  if(ai)refreshAiTracker();
  if(research)refreshResearch();
  if(bet)refreshVirtualBetting();
+ if(group)refreshGroupBets();
  if(match){refreshMatchCentre();matchAutoTimer=setInterval(()=>{if(!document.hidden&&loggedIn&&!document.getElementById("matchView").classList.contains("hidden"))refreshMatchCentre(true);},120000);}
 }
 
@@ -1084,6 +1094,7 @@ document.getElementById("matchRoundSelect").onchange=refreshMatchCentre;
 document.getElementById("aiViewBtn").onclick=()=>showView("ai");
 document.getElementById("researchViewBtn").onclick=()=>showView("research");
 document.getElementById("betViewBtn").onclick=()=>showView("bet");
+document.getElementById("groupViewBtn").onclick=()=>showView("group");
 document.getElementById("recapViewBtn").onclick=()=>showView("recap");
 document.getElementById("refreshRecapBtn").onclick=refreshRecap;
 document.getElementById("recapRoundSelect").onchange=refreshRecap;
@@ -1167,4 +1178,5 @@ start();
 </script>
 </body>
 </html>
+
 
