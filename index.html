@@ -237,7 +237,7 @@ details.predictionCard[open]>summary::after{transform:rotate(180deg)}
 </div>
 
 <script src="./research.js?v=research-expanded-six-markets-20261011"></script>
-<script src="./group-bet.js?v=20261017-returns"></script>
+<script src="./group-bet.js?v=20261017-live"></script>
 <script>
 const SUPABASE_URL="https://ekbwbibmicqfrompglyq.supabase.co";
 const SUPABASE_KEY="sb_publishable_3_9tReCoYfbZG5if1PKAPQ_am8pb55g";
@@ -592,6 +592,7 @@ function updateAiAccess(){
 }
 let matchAutoTimer=null;
 function showView(view){
+ stopGroupBetAutoRefresh();
  if(matchAutoTimer){clearInterval(matchAutoTimer);matchAutoTimer=null;}
  const ai=view==="ai"&&loggedIn&&me==="Joe";
  const research=view==="research"&&loggedIn&&me==="Joe";
@@ -621,7 +622,7 @@ function showView(view){
  if(ai)refreshAiTracker();
  if(research)refreshResearch();
  if(bet)refreshVirtualBetting();
- if(group)refreshGroupBets();
+ if(group){refreshGroupBets();startGroupBetAutoRefresh();}
  if(match){refreshMatchCentre();matchAutoTimer=setInterval(()=>{if(!document.hidden&&loggedIn&&!document.getElementById("matchView").classList.contains("hidden"))refreshMatchCentre(true);},120000);}
 }
 
