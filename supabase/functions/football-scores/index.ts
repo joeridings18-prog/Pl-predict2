@@ -1,7 +1,7 @@
 const groupScoreCache=new Map<string,{at:number,body:string}>();
 function groupCanonical(name:unknown){
  const n=String(name||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/\b(fc|afc)\b/g,'').replace(/[^a-z0-9]/g,'');
- return ({brightonhovealbion:'brighton',stockportcounty:'stockport',grimsbytown:'grimsby',northamptontown:'northampton',boltonwanderers:'bolton'} as Record<string,string>)[n]||n;
+ return ({brightonhovealbion:'brighton',stockportcounty:'stockport',grimsbytown:'grimsby',northamptontown:'northampton',boltonwanderers:'bolton',asroma:'roma',skslovanbratislava:'slovanbratislava',leicestercity:'leicester',villarrealcf:'villarreal'} as Record<string,string>)[n]||n;
 }
 async function groupBetScores(url:URL,headers:Record<string,string>){
  const id=url.searchParams.get('groupBetId')||'';
@@ -18,10 +18,11 @@ async function groupBetScores(url:URL,headers:Record<string,string>){
   if(!row)return new Response(JSON.stringify({error:'Group bet not found'}),{status:404,headers});
   const date=row.data.date;
   if(!/^\d{4}-\d{2}-\d{2}$/.test(date))throw Error('Invalid group bet date');
-  const leagues=['eng.1','eng.2','eng.3','eng.4'];
+  const leagues=['eng.1','eng.2','eng.3','eng.4','uefa.champions'];
   const jobs=new Map<string,{league:string,date:string}>();
   for(const p of row.data.picks||[]){
-   const comps=leagues.includes(p.competition)?[p.competition]:leagues;
+   const competition=p.competition==='CL'?'uefa.champions':p.competition;
+   const comps=leagues.includes(competition)?[competition]:leagues;
    const kickoff=Date.parse(p.kickoff||'');
    const days=Number.isFinite(kickoff)?[new Date(kickoff).toISOString().slice(0,10)]:[0,1,2].map(n=>new Date(Date.parse(date+'T00:00:00Z')+n*86400000).toISOString().slice(0,10));
    for(const league of comps)for(const day of days)jobs.set(league+'|'+day,{league,date:day});
@@ -40,7 +41,7 @@ async function groupBetScores(url:URL,headers:Record<string,string>){
      return {id:e.id,utcDate:c?.date||e.date,status,clock:st?.displayClock||'',minute:st?.clock?Math.floor(st.clock/60):null,home:home?.team?.displayName,away:away?.team?.displayName,homeShort:home?.team?.shortDisplayName,awayShort:away?.team?.shortDisplayName,homeScore:score(home),awayScore:score(away),competition:league};
     }).filter((m:any)=>m.home&&m.away&&m.utcDate);
     return {matches};
-   }catch(e){console.warn('Group score feed',league,date,String(e?.message||'request failed'));return {matches:[],issue:({'eng.1':'Premier League','eng.2':'Championship','eng.3':'League One','eng.4':'League Two'} as Record<string,string>)[league]+' scores temporarily unavailable'};}
+   }catch(e){console.warn('Group score feed',league,date,String(e?.message||'request failed'));return {matches:[],issue:({'eng.1':'Premier League','eng.2':'Championship','eng.3':'League One','eng.4':'League Two','uefa.champions':'Champions League'} as Record<string,string>)[league]+' scores temporarily unavailable'};}
   }));
   const matches=feeds.flatMap(x=>x.matches),issues=feeds.flatMap(x=>x.issue?[x.issue]:[]);
   const finals={...(row.data.final_scores||{})};
