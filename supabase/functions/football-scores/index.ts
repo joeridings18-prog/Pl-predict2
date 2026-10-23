@@ -1,3 +1,43 @@
+
+const scoreAliases:Record<string,string>={"racingclubdelens":"lens","rclens":"lens","sportingclubedeportugal":"sportingcp","sabahfk":"sabah","skslaviapraha":"slaviaprague","slaviapraha":"slaviaprague","internazionalemilano":"intermilan","inter":"intermilan","clubbruggekv":"clubbrugge","galatasaraysk":"galatasaray","barca":"barcelona","clubatleticodemadrid":"atleticomadrid","atleti":"atleticomadrid","vikingfk":"viking","bayernmunchen":"bayernmunich","bayern":"bayernmunich","psv":"psveindhoven","villarrealcf":"villarreal","sscnapoli":"napoli","feyenoordrotterdam":"feyenoord","como1907":"como","asroma":"roma","realmadridcf":"realmadrid","fkbodglimt":"bodglimt","dortmund":"borussiadortmund","fenerbahcesk":"fenerbahce","realbetisbalompie":"realbetis","porto":"porto","parissaintgermain":"psg","fkshakhtardonetsk":"shakhtardonetsk","shaktar":"shakhtardonetsk","paeaek":"aekathens","skslovanbratislava":"slovanbratislava","slslovanbratislava":"slovanbratislava","slbratislava":"slovanbratislava","stuttgart":"vfbstuttgart","lask":"lasklinz",westhamunited:"westham",westham:"westham",queensparkrangers:"qpr",manchesterunited:"manunited",manchestercity:"mancity",tottenhamhotspur:"tottenham",brightonhovealbion:"brighton",wolverhamptonwanderers:"wolves",westbromwichalbion:"westbrom",newcastleunited:"newcastle",leedsunited:"leeds",afcbournemouth:"bournemouth",ipswichtown:"ipswich",hullcity:"hull",coventrycity:"coventry",charltonathletic:"charlton",swanseacity:"swansea",norwichcity:"norwich",blackburnrovers:"blackburn",boltonwanderers:"bolton",derbycounty:"derby",lincolncity:"lincoln",stokecity:"stoke",birminghamcity:"birmingham",cardiffcity:"cardiff",prestonnorthend:"preston"};
+function scoreName(s:unknown){const n=String(s||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().replace(/\b(football club|fc|afc)\b/g,"").replace(/[^a-z0-9]/g,"");return scoreAliases[n]||n;}
+const alternateScoreCache=new Map<string,{at:number,matches:any[]}>();
+async function freshAlternateScores(comp:string,date:string){
+ const league=({PL:"eng.1",ELC:"eng.2",CL:"uefa.champions"} as Record<string,string>)[comp];
+ const cacheKey=league+"|"+date,cached=alternateScoreCache.get(cacheKey);
+ if(cached&&Date.now()-cached.at<60000)return cached.matches;
+ const response=await fetch("https://site.api.espn.com/apis/site/v2/sports/soccer/"+league+"/scoreboard?dates="+date.replaceAll("-","")+"&limit=100",{headers:{Accept:"application/json","User-Agent":"PL-Predict/1.0"},signal:AbortSignal.timeout(12000)});
+ if(!response.ok)throw Error("Alternate score provider unavailable");
+ const body=await response.json();if(!Array.isArray(body.events))throw Error("Invalid alternate score response");
+ const matches=body.events.map((e:any)=>{
+  const c=e.competitions?.[0],h=c?.competitors?.find((x:any)=>x.homeAway==="home"),a=c?.competitors?.find((x:any)=>x.homeAway==="away");
+  const state=c?.status||e.status,t=state?.type||{},name=String(t.name||"");
+  const status=/POSTPONED/.test(name)?"POSTPONED":/CANCEL/.test(name)?"CANCELLED":/SUSPEND|ABANDON/.test(name)?"SUSPENDED":t.completed&&t.state==="post"?"FINISHED":/HALFTIME/.test(name)?"PAUSED":t.state==="in"?"IN_PLAY":"TIMED";
+  const readScore=(x:any)=>["IN_PLAY","PAUSED","FINISHED"].includes(status)&&x?.score!==null&&x?.score!==undefined&&x.score!==""&&Number.isInteger(Number(x.score))&&Number(x.score)>=0?Number(x.score):null;
+  return {id:e.id,utcDate:c?.date||e.date,status,home:h?.team?.displayName,away:a?.team?.displayName,homeShort:h?.team?.shortDisplayName,awayShort:a?.team?.shortDisplayName,homeScore:readScore(h),awayScore:readScore(a),minute:state?.clock?Math.floor(state.clock/60):null};
+ }).filter((m:any)=>m.home&&m.away&&m.utcDate);
+ if(alternateScoreCache.size>100)alternateScoreCache.clear();
+ alternateScoreCache.set(cacheKey,{at:Date.now(),matches});return matches;
+}
+async function supplementLiveScores(matches:any[],comp:string){
+ const now=Date.now();
+ const pending=matches.filter(m=>{
+  const kick=Date.parse(m.utcDate);
+  return Number.isFinite(kick)&&kick<=now&&kick>=now-48*3600000&&!["FINISHED","POSTPONED","CANCELLED","SUSPENDED"].includes(m.status);
+ });
+ const days=[...new Set(pending.map(m=>m.utcDate.slice(0,10)))];
+ const supplements=(await Promise.all(days.map(async date=>{try{return await freshAlternateScores(comp,date);}catch(e){console.warn("Alternate scoreboard",comp,date,String(e?.message||e));return [];}}))).flat();
+ return matches.map(m=>{
+  if(!pending.includes(m))return m;
+  const found=supplements.filter(x=>Math.abs(Date.parse(x.utcDate)-Date.parse(m.utcDate))<6*3600000&&
+   [m.home,m.homeShort].some(n=>n&&[x.home,x.homeShort].some(v=>v&&scoreName(n)===scoreName(v)))&&
+   [m.away,m.awayShort].some(n=>n&&[x.away,x.awayShort].some(v=>v&&scoreName(n)===scoreName(v))));
+  if(found.length!==1)return m;
+  const f=found[0];if(!["IN_PLAY","PAUSED","FINISHED"].includes(f.status)||f.homeScore===null||f.awayScore===null)return m;
+  return {...m,status:f.status,homeScore:f.homeScore,awayScore:f.awayScore,minute:f.minute,scoreSource:"ESPN",alternateMatchId:f.id};
+ });
+}
+
 const groupScoreCache=new Map<string,{at:number,body:string}>();
 function groupCanonical(name:unknown){
  const n=String(name||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/\b(fc|afc)\b/g,'').replace(/[^a-z0-9]/g,'');
@@ -82,6 +122,7 @@ Deno.serve(async(req)=>{
  const raw=await upstream.json();
  if(!upstream.ok)return new Response(JSON.stringify({error:"Football provider unavailable",status:upstream.status}),{status:502,headers});
  const matches=(raw.matches||[]).map(m=>({id:m.id,utcDate:m.utcDate,status:m.status,matchday:m.matchday??null,stage:m.stage??null,minute:m.minute??null,home:m.homeTeam?.name,away:m.awayTeam?.name,homeShort:m.homeTeam?.shortName,awayShort:m.awayTeam?.shortName,homeScore:m.score?.fullTime?.home??null,awayScore:m.score?.fullTime?.away??null}));
- return new Response(JSON.stringify({competition:comp,updatedAt:new Date().toISOString(),delayed:true,matches}),{headers});
+ const currentMatches=season?matches:await supplementLiveScores(matches,comp!);
+ return new Response(JSON.stringify({competition:comp,updatedAt:new Date().toISOString(),delayed:true,matches:currentMatches}),{headers});
  }catch(e){return new Response(JSON.stringify({error:"Score feed request failed"}),{status:502,headers});}
 });
