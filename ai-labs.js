@@ -2,7 +2,7 @@
 "use strict";
 const STORAGE="pl_ai_labs_v1";
 let historicalResults=new Map();
-let generation=0,roundRequest=0,trackerRequest=0,trackerRounds=new Map(),revisions=[];
+let generation=0,roundRequest=0,trackerRequest=0,trackerRounds=new Map(),revisions=[],loadingRound=null;
 const feeds=new Map(),automatic=new Map();
 const root=()=>document.getElementById("aiLabsContent");
 const safe=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -44,46 +44,53 @@ function render(){
  const preferred=upcoming[0]||gs[gs.length-1];
  const el=root();if(!el)return;
  el.innerHTML='<h2 style="margin:0 0 8px">🧪 AI Labs · Automatic team model</h2>'+
- '<p class="small">Generate goal estimates from this season’s completed results, or enter your own assumptions. Compare picks for our <b>6-point result + 10-point exact-score</b> rules. Use a Labs pick in your private AI Tracker before kickoff; previous picks are kept for comparison.</p>'+
+ '<p class="small">Goal estimates and probabilities load automatically from this season’s completed results. Compare picks for our <b>6-point result + 10-point exact-score</b> rules. Use a Labs pick in your private AI Tracker before kickoff; previous picks are kept for comparison.</p>'+
  '<div class="statMiniGrid"><div class="statMini"><span>Model</span><b>Poisson + Dixon–Coles</b></div><div class="statMini"><span>Strategy</span><b>Expected points</b></div></div>'+
  '<label class="roundPickerLabel" for="labRound">Choose prediction round</label><select id="labRound" class="roundPickerSelect">'+gs.map(g=>'<option value="'+safe(g.id)+'"'+(g===preferred?' selected':'')+'>'+safe(g.round_label||g.id)+'</option>').join('')+'</select>'+
- '<button id="labGenerate" class="submit" type="button">↻ Generate estimates for this round</button><p id="labDataStatus" class="small" role="status">Uses the existing results feed. Each competition is modelled separately.</p>'+
+ '<button id="labGenerate" class="submit" type="button">↻ Refresh automatic estimates</button><p id="labDataStatus" class="small" role="status">Uses the existing results feed. Each competition is modelled separately.</p>'+
  '<details class="fixtureCompare"><summary>How automatic estimates work</summary><p class="small">Current-season goals only: last 10 matches, a 45-day recency half-life, home/away scoring rates and two opponent-strength adjustment passes. Small samples are pulled towards competition averages using five prior games. Overall and venue ratings receive equal weight. At least 20 completed matches per competition and three per team are required; insufficient samples stay blank. Matches starting within the last four hours are excluded.</p><p class="small">These are goals-based expected-goals estimates, not shot-based xG. Injuries, lineups and cross-league strength are not included. The model is experimental and has not been validated as an improvement. Rho stays at zero until calibrated. Feed snapshots refresh after 15 minutes; use the generate button to check again.</p></details>'+
- '<details class="fixtureCompare"><summary>How to use AI Labs</summary><ol><li>Generate estimates for the round.</li><li>Open a fixture and review the recent results and sample warnings.</li><li>Use the highest expected-points pick as the starting recommendation for this competition.</li><li>For a what-if test, edit expected goals and recalculate. Leave rho at zero.</li><li>Save a browser experiment, or press Use this pick in AI Tracker to change the private tracked pick before kickoff.</li><li>Review original versus current picks below as results arrive.</li></ol><p class="small">Expected points is a long-run model average, not a promised score. The model does not include lineups or injuries. Betting value also needs current odds and validated probabilities.</p></details>'+
+ '<details class="fixtureCompare"><summary>How to use AI Labs</summary><ol><li>Choose a round. Estimates and probabilities load automatically.</li><li>Open a fixture and review the recent results and sample warnings.</li><li>Use the highest expected-points pick as the starting recommendation for this competition.</li><li>For an optional what-if test, edit expected goals and recalculate. Leave rho at zero.</li><li>Save a browser experiment, or press Use this pick in AI Tracker to change the private tracked pick before kickoff.</li><li>Review original versus current picks below as results arrive.</li></ol><p class="small">Expected points is a long-run model average, not a promised score. The model does not include lineups or injuries. Betting value also needs current odds and validated probabilities.</p></details>'+
  '<div id="labFixtures"></div><h3>🔁 AI Tracker comparisons</h3><div id="labTrackerHistory"></div><h3>📋 Saved experiments</h3><div id="labHistory"></div>'+
  '<p class="small">Saved trials remain in this browser only. Automatic estimates include their data source, sample and model settings. Edited inputs are marked as manual overrides. These trials are not an independently audited backtest.</p>';
  document.getElementById("labRound").onchange=renderFixtures;
  document.getElementById("labGenerate").onclick=generateRound;
- renderFixtures();renderHistory();loadResults();
+ const ready=renderFixtures();renderHistory();loadResults();return ready;
 }
 function renderFixtures(){
- roundRequest++;automatic.clear();
+ roundRequest++;automatic.clear();loadingRound=null;
  const g=selected(),box=document.getElementById("labFixtures");if(!g||!box)return;
- const now=Date.now();
+ const now=Date.now(),firstOpen=Math.max(0,g.fixtures.findIndex(f=>fixtureDate(f)>now));
  box.innerHTML=(g.fixtures||[]).map((f,i)=>{
  const t=fixtureDate(f),open=t!==null&&t>now;
- return '<details class="fixtureCompare" '+(i===0?'open':'')+'><summary><b>'+safe(f[0])+' v '+safe(f[1])+'</b> <span class="small">'+(t?new Date(t).toLocaleString("en-GB"):"Kickoff unknown")+'</span></summary>'+
- '<div class="statMiniGrid" style="margin-top:12px"><label>Home expected goals<input type="number" inputmode="decimal" step=".05" min=".1" max="6" id="lh'+i+'" placeholder="e.g. 1.65" style="width:100%;padding:11px;margin-top:6px;border:1px solid #ccc;border-radius:9px"></label><label>Away expected goals<input type="number" inputmode="decimal" step=".05" min=".1" max="6" id="la'+i+'" placeholder="e.g. 1.10" style="width:100%;padding:11px;margin-top:6px;border:1px solid #ccc;border-radius:9px"></label></div>'+
- '<label class="roundPickerLabel" for="lr'+i+'">Dixon–Coles rho (default 0 = independent Poisson)</label><input id="lr'+i+'" type="number" inputmode="decimal" min="-.2" max=".2" step=".01" value="0" style="padding:10px;width:100%;border-radius:9px;border:1px solid #ccc">'+
+ return '<details class="fixtureCompare" '+(i===firstOpen?'open':'')+'><summary><b>'+safe(f[0])+' v '+safe(f[1])+'</b> <span class="small">'+(t?new Date(t).toLocaleString("en-GB"):"Kickoff unknown")+'</span></summary>'+
+ '<p class="small">'+(open?'These goal estimates fill in automatically. Editing them is optional.':'This match has started or its kickoff is unknown. Automatic pre-match estimates are unavailable; its tracked pick stays locked.')+'</p><div class="statMiniGrid" style="margin-top:12px"><label>Home expected goals<input type="number" inputmode="decimal" step=".01" min=".1" max="6" id="lh'+i+'" placeholder="'+(open?'Loading…':'Unavailable')+'" style="width:100%;padding:11px;margin-top:6px;border:1px solid #ccc;border-radius:9px"></label><label>Away expected goals<input type="number" inputmode="decimal" step=".01" min=".1" max="6" id="la'+i+'" placeholder="'+(open?'Loading…':'Unavailable')+'" style="width:100%;padding:11px;margin-top:6px;border:1px solid #ccc;border-radius:9px"></label></div>'+
+ '<details style="margin-top:12px"><summary class="small">Advanced settings (optional)</summary><label class="roundPickerLabel" for="lr'+i+'">Dixon–Coles rho (leave at 0)</label><input id="lr'+i+'" type="number" inputmode="decimal" min="-.2" max=".2" step=".01" value="0" style="padding:10px;width:100%;border-radius:9px;border:1px solid #ccc"></details>'+
  '<div id="labEvidence'+i+'" class="small"></div><button class="submit" type="button" data-evaluate="'+i+'">Calculate probabilities</button><div id="labOutput'+i+'"></div>'+
  '<p id="labCurrentPick'+i+'" class="small"></p>'+
  (open?'<button class="submit" style="background:#333" type="button" data-save="'+i+'">Save experiment in this browser</button><button class="submit" type="button" data-apply="'+i+'" disabled>Use this pick in AI Tracker</button><p id="labApplyStatus'+i+'" class="small" role="status"></p>':'<p class="small">Kickoff passed or unknown: this AI pick is locked.</p>')+
  '</details>';
  }).join('');
- box.querySelectorAll("[data-evaluate]").forEach(b=>b.onclick=()=>evaluate(Number(b.dataset.evaluate)));
+ box.querySelectorAll("[data-evaluate]").forEach(b=>b.onclick=async()=>{const i=Number(b.dataset.evaluate);if(!hasInputs(i)){await generateRound();return;}evaluate(i);});
  box.querySelectorAll("[data-save]").forEach(b=>b.onclick=()=>save(Number(b.dataset.save)));
  box.querySelectorAll("[data-apply]").forEach(b=>b.onclick=()=>applyPick(Number(b.dataset.apply)));
+ box.querySelectorAll("input").forEach(input=>input.oninput=renderTrackerPicks);
  renderTrackerPicks();renderTrackerHistory();
  const button=document.getElementById("labGenerate");if(button)button.disabled=false;
- const status=document.getElementById("labDataStatus");if(status)status.textContent="Generate estimates from completed current-season results. Existing values in this round will be replaced.";
+ return generateRound();
 }
+function hasInputs(i){return !!document.getElementById("lh"+i)?.value&&!!document.getElementById("la"+i)?.value;}
 function renderTrackerPicks(){
  const g=selected();if(!g||!current())return;
  const round=trackerRounds.get(String(g.id));
  (g.fixtures||[]).forEach((f,i)=>{
   const label=document.getElementById("labCurrentPick"+i),b=document.querySelector('[data-apply="'+i+'"]'),p=round?.predictions?.[i];
   if(label)label.textContent=round?"Current AI Tracker pick: "+(Array.isArray(p)?p.join("–"):"No pick"):"AI Tracker data unavailable for this round. Reopen Labs to refresh.";
-  if(b)b.disabled=!round||fixtureDate(f)===null||fixtureDate(f)<=Date.now();
+  const busy=loadingRound===String(g.id),ready=hasInputs(i);
+  if(b)b.disabled=!round||busy||!ready||fixtureDate(f)===null||fixtureDate(f)<=Date.now();
+  const evaluateButton=document.querySelector('[data-evaluate="'+i+'"]'),saveButton=document.querySelector('[data-save="'+i+'"]');
+  if(evaluateButton){evaluateButton.disabled=busy;evaluateButton.textContent=busy?"Loading automatic estimates…":ready?"Recalculate probabilities":"Retry automatic estimates";}
+  if(saveButton)saveButton.disabled=busy||!ready;
+  for(const id of ["lh","la","lr"]){const input=document.getElementById(id+i);if(input)input.disabled=busy;}
  });
 }
 async function applyPick(i){
@@ -134,8 +141,10 @@ async function generateRound(){
  const g=selected(),request=++roundRequest,view=generation,button=document.getElementById("labGenerate"),status=document.getElementById("labDataStatus"),now=Date.now();
  if(!g||!window.AiTeamModel){if(status)status.textContent="Team model could not load. Refresh this page and try again.";return;}
  const targets=g.fixtures.map((f,i)=>({f,i,comp:AiTeamModel.competition(f,g)})).filter(x=>fixtureDate(x.f)>now);
- if(!targets.length){status.textContent="No upcoming fixtures in this round.";return;}
- button.disabled=true;status.textContent="Loading current-season team results…";
+ if(!targets.length){status.textContent="No upcoming fixtures in this round. Started matches stay locked.";renderTrackerPicks();return;}
+ loadingRound=String(g.id);renderTrackerPicks();
+ button.disabled=true;status.textContent="Loading goal estimates and probabilities automatically…";
+ for(const {i} of targets)document.getElementById("labOutput"+i).innerHTML='<p class="small" role="status">Loading automatic estimates…</p>';
  const competitions=[...new Set(targets.map(x=>x.comp).filter(Boolean))],loaded=new Map();
  await Promise.all(competitions.map(async comp=>{try{loaded.set(comp,await teamFeed(comp));}catch(e){loaded.set(comp,{error:e.message});}}));
  if(!current()||generation!==view||roundRequest!==request||selected()!==g)return;
@@ -152,11 +161,12 @@ async function generateRound(){
    const h=Number(d.h.toFixed(2)),a=Number(d.a.toFixed(2));
    automatic.set(i,{...d,h,a,source:feed.source,feedUpdated:feed.updatedAt,fetched:feed.fetched,competition:comp});
    document.getElementById("lh"+i).value=h;document.getElementById("la"+i).value=a;document.getElementById("lr"+i).value=0;
+   for(const id of ["lh","la"])document.getElementById(id+i).placeholder="Automatic estimate";
    evidence.innerHTML=evidenceHtml(automatic.get(i),f);evaluate(i);count++;
-  }catch(e){evidence.innerHTML='<div class="warn">Automatic estimate unavailable: '+safe(e.message)+' You can enter manual assumptions above.</div>';issues.push(f[0]+" v "+f[1]);}
+  }catch(e){evidence.innerHTML='<div class="warn">Automatic estimate unavailable: '+safe(e.message)+' Use Refresh automatic estimates to retry, or optionally enter your own assumptions above.</div>';for(const id of ["lh","la"])document.getElementById(id+i).placeholder="Estimate unavailable";issues.push(f[0]+" v "+f[1]);}
  }
- status.textContent=count+" of "+targets.length+" upcoming fixtures modelled. "+(issues.length?issues.length+" need manual inputs; see each fixture.":"Open a fixture to review its sample and probabilities.");
- button.disabled=false;
+ status.textContent=count+" of "+targets.length+" upcoming fixtures modelled automatically. "+(issues.length?issues.length+" could not load; see each fixture for the reason.":"Goal estimates are filled in and probabilities calculated. Open a fixture to review.");
+ loadingRound=null;renderTrackerPicks();button.disabled=false;
 }
 function evidenceHtml(d,f){
  const avg=n=>n===null?"—":Number(n).toFixed(2);
@@ -219,5 +229,5 @@ function renderHistory(){
  }).join('')+'</tbody></table></div><p class="small">Actual scores are shown only if included in the available round data. This browser history is not shared across devices.</p>';
 }
 window.renderAiLabs=render;
-window.clearAiLabs=()=>{generation++;roundRequest++;trackerRequest++;automatic.clear();historicalResults.clear();trackerRounds.clear();revisions=[];if(root())root().innerHTML="";};
+window.clearAiLabs=()=>{generation++;roundRequest++;trackerRequest++;automatic.clear();historicalResults.clear();trackerRounds.clear();revisions=[];loadingRound=null;if(root())root().innerHTML="";};
 })();

@@ -4,7 +4,7 @@ Joe's private Labs tab provides experimental estimates. Generating estimates and
 
 ## Automatic team model
 
-Select a round and press **Generate estimates for this round**. Open a fixture to inspect the sample, estimated goals and the three highest expected-points picks. Saving an experiment records a local trial; manual edits are labelled as overrides. To use the recommended pick in the private tracked experiment, press **Use this pick in AI Tracker** before kickoff. An existing tracker entry for the round is required.
+Opening Labs or selecting a round automatically fills the goal estimates and calculates probabilities for upcoming fixtures. **Refresh automatic estimates** reruns this process. Open a fixture to inspect the sample, estimated goals and the three highest expected-points picks. Editing inputs is optional; advanced rho settings are collapsed by default. Saving an experiment records a local trial; manual edits are labelled as overrides. To use the recommended pick in the private tracked experiment, press **Use this pick in AI Tracker** before kickoff. An existing tracker entry for the round is required.
 
 Review **AI Tracker comparisons** for each revised fixture's original and current picks, change time and recorded points. Revisions and model context are stored across devices behind Joe's PIN check. The first saved round timestamp is preserved. The database rejects changes at or after the stored fixture kickoff, changes to fixtures with recorded results, and deletion of AI history. It keeps an audit entry for every changed pick, including administrator revisions. Client-side changes also verify the expected previous pick and fixture identity to prevent overwriting a stale device's data.
 
