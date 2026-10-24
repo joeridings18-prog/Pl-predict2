@@ -1,6 +1,7 @@
 (function(){
 "use strict";
 const STORAGE="pl_ai_labs_v1";
+let historicalResults=new Map();
 const root=()=>document.getElementById("aiLabsContent");
 const safe=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const eligible=()=>Array.isArray(games)?games.filter(g=>Array.isArray(g.fixtures)&&g.fixtures.length):[];
@@ -46,7 +47,7 @@ function render(){
  '<div id="labFixtures"></div><h3>📋 Saved experiments</h3><div id="labHistory"></div>'+
  '<p class="small">Experimental inputs are manually supplied, not live verified xG. Saved trials remain in this browser only. Predictions saved before kickoff can be evaluated later, but are not an independently audited backtest.</p>';
  document.getElementById("labRound").onchange=renderFixtures;
- renderFixtures();renderHistory();
+ renderFixtures();renderHistory();loadResults();
 }
 function renderFixtures(){
  const g=selected(),box=document.getElementById("labFixtures");if(!g||!box)return;
@@ -88,13 +89,19 @@ function save(i){
  rows.push(entry);
  try{localStorage.setItem(STORAGE,JSON.stringify(rows));renderHistory();document.getElementById("labOutput"+i).insertAdjacentHTML("beforeend",'<div class="ok">Experiment saved in this browser; official prediction unchanged.</div>');}catch{alert("Could not save locally on this device.");}
 }
+async function loadResults(){
+ if(!current())return;
+ try{const {data,error}=await sb.rpc("get_ai_tracker_with_pin",{p_player:"Joe",p_pin:pin,p_season_key:SEASON_KEY});if(error)return;
+ historicalResults=new Map((data?.rounds||[]).map(r=>[String(r.game_id),r.results||[]]));renderHistory();
+ }catch{}
+}
 function renderHistory(){
  const box=document.getElementById("labHistory");if(!box)return;
  const rows=stored().filter(x=>x&&x.game_id!==undefined).sort((a,b)=>b.created-a.created).slice(0,100);
  if(!rows.length){box.innerHTML='<p class="small">No experiments saved yet. Run a fixture model above, then save before kickoff.</p>';return;}
  const roundById=new Map(eligible().map(g=>[String(g.id),g]));
  box.innerHTML='<div style="overflow-x:auto"><table><thead><tr><th>Fixture</th><th>Pick</th><th>Expected pts</th><th>Actual pts</th></tr></thead><tbody>'+rows.map(x=>{
-  const g=roundById.get(String(x.game_id));const result=g?.results?.[x.index];const final=Array.isArray(result)&&result.length===2&&result.every(n=>n!==null&&Number.isFinite(Number(n)));
+  const g=roundById.get(String(x.game_id));const result=historicalResults.get(String(x.game_id))?.[x.index]||g?.results?.[x.index];const final=Array.isArray(result)&&result.length===2&&result.every(n=>n!==null&&Number.isFinite(Number(n)));
   const points=final?((Number(result[0])===x.pick[0]&&Number(result[1])===x.pick[1]?10:0)+(scoreResult(Number(result[0]),Number(result[1]))===scoreResult(x.pick[0],x.pick[1])?6:0)):null;
   return '<tr><td>'+safe(x.home)+' v '+safe(x.away)+'<div class="small">'+safe(x.round)+' · '+new Date(x.created).toLocaleDateString("en-GB")+'</div></td><td>'+safe(x.pick.join("–"))+'</td><td>'+Number(x.expected_points).toFixed(2)+'</td><td>'+(points===null?'Pending':points)+'</td></tr>';
  }).join('')+'</tbody></table></div><p class="small">Actual scores are shown only if included in the available round data. This browser history is not shared across devices.</p>';
