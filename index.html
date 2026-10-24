@@ -208,6 +208,7 @@ details.predictionCard[open]>summary::after{transform:rotate(180deg)}
 <div id="aiView" class="hidden">
 <div class="statsHero"><h2>🔒 Al's AI Tracker</h2><div class="small">Private season-long prediction experiment. Predictions are locked before kickoff.</div></div>
 <div id="aiTrackerContent" class="card"><p class="small">Loading AI statistics…</p></div>
+<div id="aiPredictionLab" class="card"></div>
 </div>
 <div id="statsView" class="hidden">
   <div class="statsHero">
@@ -1177,6 +1178,7 @@ document.getElementById("stopPushBtn").addEventListener("click",async()=>{
 start();
 // Automatic refresh disabled so form inputs can never be redrawn while Joe is typing.
 </script>
+<script src="./ai-prediction-lab.js?v=20261024"></script>
 </body>
 </html>
 
