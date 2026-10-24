@@ -207,11 +207,11 @@ details.predictionCard[open]>summary::after{transform:rotate(180deg)}
 <div id="recapView" class="hidden"><div class="statsHero"><h2>📰 Gameweek Recap</h2><div class="small">Joe-only preview · Review the first week before sharing.</div></div><div class="card"><label for="recapRoundSelect" class="roundPickerLabel">Choose a round</label><select id="recapRoundSelect" class="roundPickerSelect"></select><button id="refreshRecapBtn" type="button" class="submit">↻ Refresh recap</button></div><div id="recapContent"></div></div>
 <div id="researchView" class="hidden"><div class="statsHero"><h2>🔒 Match Research</h2><div class="small">Joe’s private player-prop and team-goals research.</div></div><div id="researchContent" class="card"></div></div>
 <div id="aiView" class="hidden">
-<div class="statsHero"><h2>🔒 Al's AI Tracker</h2><div class="small">Private season-long prediction experiment. Predictions are locked before kickoff.</div></div>
+<div class="statsHero"><h2>🔒 Al's AI Tracker</h2><div class="small">Private season-long experiment. AI Labs can revise upcoming picks; each match locks at kickoff.</div></div>
 <div id="aiTrackerContent" class="card"><p class="small">Loading AI statistics…</p></div>
 
 </div>
-<div id="labsView" class="hidden"><div class="statsHero"><h2>🧪 AI Labs</h2><div class="small">Private experiments · Separate from locked competition predictions</div></div><div id="aiLabsContent" class="card"></div></div>
+<div id="labsView" class="hidden"><div class="statsHero"><h2>🧪 AI Labs</h2><div class="small">Private experiments · Apply AI Tracker picks before kickoff</div></div><div id="aiLabsContent" class="card"></div></div>
 <div id="statsView" class="hidden">
   <div class="statsHero">
     <h2>📊 Stats & Records</h2>
@@ -242,7 +242,7 @@ details.predictionCard[open]>summary::after{transform:rotate(180deg)}
 <script src="./research.js?v=research-expanded-six-markets-20261011"></script>
 <script src="./group-bet.js?v=20261020-cl"></script>
 <script src="./ai-team-model.js?v=20261024-2" defer></script>
-<script src="./ai-labs.js?v=20261024-2" defer></script>
+<script src="./ai-labs.js?v=20261024-3" defer></script>
 <script>
 const SUPABASE_URL="https://ekbwbibmicqfrompglyq.supabase.co";
 const SUPABASE_KEY="sb_publishable_3_9tReCoYfbZG5if1PKAPQ_am8pb55g";
@@ -896,7 +896,7 @@ async function refreshAiTracker(){
  '<h3>💷 AI Virtual Betting · Season totals</h3><p class="small">£10 per prediction in each market. Settled, priced predictions only. No real bets.</p>'+aiBetSummary(betRows)+
  '<h3>Round-by-round history</h3>'+
  (rounds.length?rounds.map(r=>'<details class="fixtureCompare"><summary><b>'+esc(r.round_label||r.game_id)+'</b> — '+Number(r.points||0)+' pts • '+Number(r.completed||0)+' results • '+Number(r.exacts||0)+' exacts</summary>'+
- '<div class="small" style="margin-top:10px">Locked: '+esc(new Date(r.locked_at).toLocaleString("en-GB"))+'</div>'+
+ '<div class="small" style="margin-top:10px">First saved: '+esc(new Date(r.locked_at).toLocaleString("en-GB"))+' · Individual picks lock at kickoff. Revision comparisons are in AI Labs.</div>'+
  aiBetSummary(betRows.filter(b=>b.game_id===r.game_id))+
  (r.fixtures||[]).map((f,i)=>{const p=r.predictions?.[i],v=r.results?.[i];return '<div style="padding:12px 0;border-bottom:1px solid #eee"><div class="sectionHead"><div><b>'+esc(f[0])+' v '+esc(f[1])+'</b><div class="small">Al: '+(Array.isArray(p)?esc(p[0])+'–'+esc(p[1]):'—')+' • Actual: '+(Array.isArray(v)?esc(v[0])+'–'+esc(v[1]):'Pending')+'</div></div><b>'+score(p,v)+'</b></div>'+aiBetMatch(betsByFixture.get(r.game_id+":"+i))+'</div>'}).join('')+'</details>').join(''):'<p class="small">No AI predictions have been locked yet. The experiment starts with the next eligible round; no historical predictions will be fabricated.</p>');
 }
