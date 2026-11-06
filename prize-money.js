@@ -1,8 +1,6 @@
 const PrizeMoney = (() => {
   const WEEKEND_RATE = 5;
   const MIDWEEK_RATE = 1;
-  // CLW4 closed out October's prize block; its points still belong to November.
-  const MIDWEEK_MONTH = {"clw4-2026": "2026-10"};
   const londonDay = new Intl.DateTimeFormat("en-GB", {weekday: "short", timeZone: "Europe/London"});
   const gbp = new Intl.NumberFormat("en-GB", {style: "currency", currency: "GBP", maximumFractionDigits: 0, minimumFractionDigits: 0});
 
@@ -28,7 +26,7 @@ const PrizeMoney = (() => {
       return {
         key, complete: scoringRounds.every(r => r.complete),
         weekend: scoringRounds.filter(r => r.weekend),
-        midweek: rounds.filter(r => !r.weekend && (MIDWEEK_MONTH[r.id] || r.month) === key)
+        midweek: scoringRounds.filter(r => !r.weekend)
       };
     });
     return {months, midweek: rounds.filter(r => !r.weekend), complete: rounds.length > 0 && rounds.every(r => r.complete)};
@@ -108,8 +106,7 @@ const PrizeMoney = (() => {
       const midweekAmount = amount(midweekFinished, MIDWEEK_RATE, players);
       const weekendNote = count ? `<p class="small">${roundCount(count, "weekend")} · ${money(count * WEEKEND_RATE)} per other player<br>${labels(month.weekend)}</p>` : "";
       const contribution = `<div class="prizeContribution"><b>${money(midweekAmount.total)} towards the season prize</b><div class="small">${roundCount(midweekFinished, "midweek")} completed · ${money(midweekAmount.perPlayer)} per other player</div>
-        ${month.midweek.length ? `<div class="small">${labels(month.midweek)}${midweekFinished < month.midweek.length ? ` · ${month.midweek.length - midweekFinished} still to finish` : ""}</div>` : ""}
-        ${month.midweek.some(r => r.month !== month.key) ? '<div class="small">CLW4 counts towards October’s prize breakdown.</div>' : ""}</div>`;
+        ${month.midweek.length ? `<div class="small">${labels(month.midweek)}${midweekFinished < month.midweek.length ? ` · ${month.midweek.length - midweekFinished} still to finish` : ""}</div>` : ""}</div>`;
       if (!count || !month.complete) {
         monthContent.innerHTML = weekendNote + `<p class="small">${count ? "Transfers will show here once all the month's results are in." : "No weekend prize for this month."}</p>` + contribution;
         return;
