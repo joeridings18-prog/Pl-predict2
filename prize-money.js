@@ -55,15 +55,20 @@ const PrizeMoney = (() => {
     return data;
   }
 
-  async function readResults(db, ids) {
+  async function readResults(db, games) {
+    const now = Date.now();
+    const started = games.filter(g => Date.parse(g.reveal_at) <= now);
     const results = [];
-    const pageSize = 500;
-    for (let offset = 0; ; offset += pageSize) {
-      const page = await read(db.from("pl_results").select("game_id,fixture_index").in("game_id", ids)
-        .order("game_id").order("fixture_index").range(offset, offset + pageSize - 1));
-      results.push(...page);
-      if (page.length < pageSize) return results;
+    // The public results function is also used by Predictions Hub. The underlying table is private.
+    const batchSize = 8;
+    for (let offset = 0; offset < started.length; offset += batchSize) {
+      const batch = await Promise.all(started.slice(offset, offset + batchSize).map(async ({id}) => {
+        const scores = await read(db.rpc("get_game_results", {p_game_id: id}));
+        return scores.map(({fixture_index}) => ({game_id: id, fixture_index}));
+      }));
+      results.push(...batch.flat());
     }
+    return results;
   }
 
   function mount({db, seasonKey, players, monthLabel, esc}) {
@@ -147,7 +152,7 @@ const PrizeMoney = (() => {
       try {
         const games = (await read(db.rpc("list_pl_games"))).filter(g => g.season_key === seasonKey);
         if (!games.length) throw Error("No rounds found");
-        const results = await readResults(db, games.map(g => g.id));
+        const results = await readResults(db, games);
         if (request !== version) return;
         ledger = buildLedger(games, results, seasonKey);
         const months = ledger.months;
