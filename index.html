@@ -283,7 +283,7 @@ const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&
 const monthLabel=k=>{
   if(!k)return "Month";
   const [y,m]=k.split("-").map(Number);
-  return new Intl.DateTimeFormat("en-IE",{month:"long",year:"numeric"}).format(new Date(Date.UTC(y,m-1,1)));
+  return new Intl.DateTimeFormat("en-IE",{month:"long",year:"numeric",timeZone:"UTC"}).format(new Date(Date.UTC(y,m-1,1)));
 };
 const prizeMoneyView=PrizeMoney.mount({db:sb,seasonKey:SEASON_KEY,players:PLAYERS,monthLabel,esc});
 
@@ -390,7 +390,6 @@ async function selectGame(id){
   renderTabs();
   localStorage.setItem("pl_game_id",game.id);
   document.getElementById("monthPill").textContent=`${game.competition==="UCL"?"Champions League":"Premier League"} • ${monthLabel(game.month_key)}`;
-  document.getElementById("monthHeader").textContent=monthLabel(game.month_key).replace(/\s\d{4}$/,"");
   document.getElementById("status").innerHTML="";
   renderFixtures();
   await refreshAll();
@@ -666,6 +665,7 @@ function showView(view){
  if(group){refreshGroupBets();startGroupBetAutoRefresh();}
  if(prize)prizeMoneyView.refresh();
  if(match){refreshMatchCentre();matchAutoTimer=setInterval(()=>{if(!document.hidden&&loggedIn&&!document.getElementById("matchView").classList.contains("hidden"))refreshMatchCentre(true);},120000);}
+ if(view==="game")refreshVisibleLeaderboard();
 }
 
 let recapRequest=0;
@@ -1058,20 +1058,48 @@ async function refreshStats(force=false){
   }
 }
 
+const ukMonth=new Intl.DateTimeFormat("en-GB",{timeZone:"Europe/London",year:"numeric",month:"2-digit"});
+let leaderboardMonth="",leaderboardRequest=0;
+function homeMonthKey(now=Date.now()){
+  const parts=ukMonth.formatToParts(now);
+  return `${parts.find(p=>p.type==="year").value}-${parts.find(p=>p.type==="month").value}`;
+}
+
 async function refreshLeaderboard(){
   if(!game)return;
-  const [m,s,statsResp]=await Promise.all([
-    sb.rpc("pl_leaderboard",{p_month_key:game.month_key,p_season_key:SEASON_KEY}),
-    sb.rpc("pl_leaderboard",{p_month_key:null,p_season_key:SEASON_KEY}),
-    sb.rpc("pl_stats_summary",{p_season_key:SEASON_KEY})
-  ]);
-  if(statsResp.data) statsCache=statsResp.data;
-  const spoonHolders=new Set(statsResp.data?.current_spoon_holders||[]);
-  const mm=Object.fromEntries((m.data||[]).map(x=>[x.player,x]));
-  const ss=Object.fromEntries((s.data||[]).map(x=>[x.player,x]));
-  const sorted=[...PLAYERS].sort((a,b)=>(mm[b]?.points||0)-(mm[a]?.points||0)||(ss[b]?.points||0)-(ss[a]?.points||0));
-  document.getElementById("leaderboard").innerHTML=sorted.map(p=>`<tr><td><b>${esc(p)}${spoonHolders.has(p)?" 🥄":""}</b></td><td>${mm[p]?.points||0}</td><td><b>${ss[p]?.points||0}</b></td></tr>`).join("");
+  const month=homeMonthKey(),request=++leaderboardRequest;
+  const body=document.getElementById("leaderboard");
+  if(month!==leaderboardMonth){
+    leaderboardMonth="";
+    document.getElementById("monthHeader").textContent=monthLabel(month).replace(/\s\d{4}$/,"");
+    body.innerHTML='<tr><td colspan="3" class="small">Loading scores…</td></tr>';
+  }
+  const isCurrent=()=>request===leaderboardRequest&&month===homeMonthKey();
+  try{
+    const [m,s,statsResp]=await Promise.all([
+      sb.rpc("pl_leaderboard",{p_month_key:month,p_season_key:SEASON_KEY}),
+      sb.rpc("pl_leaderboard",{p_month_key:null,p_season_key:SEASON_KEY}),
+      sb.rpc("pl_stats_summary",{p_season_key:SEASON_KEY})
+    ]);
+    if(!isCurrent())return;
+    if(!Array.isArray(m.data)||!Array.isArray(s.data))throw Error("Missing leaderboard scores");
+    if(statsResp.data) statsCache=statsResp.data;
+    const spoonHolders=new Set(statsResp.data?.current_spoon_holders||[]);
+    const mm=Object.fromEntries(m.data.map(x=>[x.player,x]));
+    const ss=Object.fromEntries(s.data.map(x=>[x.player,x]));
+    const sorted=[...PLAYERS].sort((a,b)=>(mm[b]?.points||0)-(mm[a]?.points||0)||(ss[b]?.points||0)-(ss[a]?.points||0));
+    body.innerHTML=sorted.map(p=>`<tr><td><b>${esc(p)}${spoonHolders.has(p)?" 🥄":""}</b></td><td>${mm[p]?.points||0}</td><td><b>${ss[p]?.points||0}</b></td></tr>`).join("");
+    leaderboardMonth=month;
+  }catch{
+    if(isCurrent()&&month!==leaderboardMonth)body.innerHTML='<tr><td colspan="3" class="small">Could not load scores. Try refreshing the page.</td></tr>';
+  }
 }
+
+function refreshVisibleLeaderboard(onlyNewMonth=false){
+  if(!document.hidden&&!document.getElementById("gameView").classList.contains("hidden")&&(!onlyNewMonth||leaderboardMonth!==homeMonthKey()))refreshLeaderboard();
+}
+document.addEventListener("visibilitychange",()=>refreshVisibleLeaderboard());
+setInterval(()=>refreshVisibleLeaderboard(true),60000);
 
 function updateNotice(){
  if(!game)return;
@@ -1116,7 +1144,6 @@ async function start(){
   renderTabs();
   renderFixtures();
   document.getElementById("monthPill").textContent=`${game.competition==="UCL"?"Champions League":"Premier League"} • ${monthLabel(game.month_key)}`;
-  document.getElementById("monthHeader").textContent=monthLabel(game.month_key).replace(/\s\d{4}$/,"");
   if(me){
     document.getElementById("pinTitle").textContent=`Enter ${me}'s 4-digit PIN`;
     if(pin&&/^\d{4}$/.test(pin)) await login(true);
@@ -1220,7 +1247,6 @@ document.getElementById("stopPushBtn").addEventListener("click",async()=>{
 });
 
 start();
-// Automatic refresh disabled so form inputs can never be redrawn while Joe is typing.
 </script>
 <script src="./ai-prediction-lab.js?v=20261024"></script>
 </body>
