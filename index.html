@@ -113,16 +113,23 @@ details.predictionCard[open]>summary::after{transform:rotate(180deg)}
 #groupForm input:not([type=checkbox]),#groupForm select{display:block;width:100%;max-width:100%;margin-top:6px;padding:11px;border:1px solid #ccc;border-radius:9px;font:inherit;background:#fff;min-width:0}
 #groupForm fieldset{min-width:0}#groupForm legend{padding:0 6px}
 @media(max-width:520px){.viewTabs{display:flex;overflow-x:auto}.viewTab{min-width:135px;flex:0 0 auto}}
+.prizeLink{padding:6px 0;border:0;background:none;color:#a10e17;font:inherit;font-size:14px;font-weight:700;cursor:pointer}
+.prizeRefresh{min-width:0;padding:9px 11px}
+.prizeSummary{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 12px;margin:14px 0 6px}
+.prizeSummary strong{font-size:28px;color:#a10e17}.prizeSummary span{font-weight:700}
+.prizeTransfers th:last-child,.prizeTransfers td:last-child{text-align:right}
+.prizeContribution{margin-top:16px;padding:12px;border-radius:10px;background:#f7f7f9;line-height:1.5}
 </style>
 </head>
 <body>
-<header><div class="wrap"><h1>⚽ PL Predict</h1><div class="sub">Monthly battles. One season champion. <span style="opacity:.7">• v12.0</span></div></div></header>
+<header><div class="wrap"><h1>⚽ PL Predict</h1><div class="sub">Monthly battles. One season champion. <span style="opacity:.7">• v12.1</span></div></div></header>
 <div class="wrap">
 
 <div class="viewTabs" id="mainViewTabs">
   <button id="gameViewBtn" class="viewTab active" type="button">⚽ Gameweek</button>
   <button id="matchViewBtn" class="viewTab hidden" type="button">⚽ Predictions Hub</button>
   <button id="groupViewBtn" class="viewTab" type="button">🤝 Group Bet</button>
+  <button id="prizeViewBtn" class="viewTab hidden" type="button">🏆 Prize Money</button>
   <button id="statsViewBtn" class="viewTab" type="button">📊 Stats & Records</button>
   <button id="recapViewBtn" class="viewTab hidden" type="button">🔒 Gameweek Recap</button>
   <button id="aiViewBtn" class="viewTab hidden" type="button">🔒 AI Tracker</button>
@@ -143,6 +150,7 @@ details.predictionCard[open]>summary::after{transform:rotate(180deg)}
 <tbody id="leaderboard"></tbody>
 </table>
 <p class="small">The monthly column automatically starts from zero for each new month. Season points keep accumulating across 2026/27.</p>
+<button id="prizeShortcut" class="prizeLink hidden" type="button">View prize money →</button>
 </div>
 
 <div id="notice" class="notice">Loading game…</div>
@@ -203,6 +211,17 @@ details.predictionCard[open]>summary::after{transform:rotate(180deg)}
 
 <div id="matchView" class="hidden"><div class="statsHero"><h2>⚽ Predictions Hub</h2><div class="small">All predictions, live and final scores, provisional standings and previous rounds in one place.</div></div><div class="card"><div class="gwNav"><select id="matchRoundSelect" aria-label="Predictions Hub round" style="width:100%;padding:12px"></select></div><button class="submit" id="refreshMatchBtn" type="button">↻ Refresh Predictions Hub</button><div id="matchContent" style="margin-top:14px">Choose a round to see matches.</div></div></div>
 <div id="groupView" class="hidden"><div class="statsHero"><h2>🤝 Group Bet</h2><div class="small">Four people. Four teams. Two four-folds. Your shared picks, results and money record.</div></div><div id="groupContent"></div></div>
+<div id="prizeView" class="hidden">
+  <div class="statsHero"><h2>🏆 Prize Money</h2><div class="small">See who pays whom after each month and at the end of the season.</div></div>
+  <div class="card">
+    <div class="sectionHead"><h2 style="margin:0">Monthly prize</h2><button id="refreshPrizeBtn" class="viewTab prizeRefresh" type="button">↻ Refresh</button></div>
+    <label for="prizeMonthSelect" class="roundPickerLabel">Choose a month</label>
+    <select id="prizeMonthSelect" class="roundPickerSelect" disabled></select>
+    <div id="prizeMonthContent" aria-live="polite"></div>
+  </div>
+  <div class="card"><h2 style="margin-top:0">Season prize</h2><div id="prizeSeasonContent" aria-live="polite"></div></div>
+  <p id="prizeRules" class="small"></p>
+</div>
 <div id="betView" class="hidden"><div class="statsHero"><h2>💷 Virtual Betting Tracker</h2><div class="small">£10-per-prediction trackers for correct scores and match results. Predictions appear after the reveal deadline. No real bets.</div></div><div id="betContent" class="card"><p class="small">Loading virtual results…</p></div></div>
 <div id="recapView" class="hidden"><div class="statsHero"><h2>📰 Gameweek Recap</h2><div class="small">Joe-only preview · Review the first week before sharing.</div></div><div class="card"><label for="recapRoundSelect" class="roundPickerLabel">Choose a round</label><select id="recapRoundSelect" class="roundPickerSelect"></select><button id="refreshRecapBtn" type="button" class="submit">↻ Refresh recap</button></div><div id="recapContent"></div></div>
 <div id="researchView" class="hidden"><div class="statsHero"><h2>🔒 Match Research</h2><div class="small">Joe’s private player-prop and team-goals research.</div></div><div id="researchContent" class="card"></div></div>
@@ -241,6 +260,7 @@ details.predictionCard[open]>summary::after{transform:rotate(180deg)}
 
 <script src="./research.js?v=research-expanded-six-markets-20261011"></script>
 <script src="./group-bet.js?v=20261020-cl"></script>
+<script src="./prize-money.js?v=20261106"></script>
 <script src="./ai-team-model.js?v=20261024-2" defer></script>
 <script src="./ai-labs.js?v=20261024-4" defer></script>
 <script>
@@ -265,6 +285,7 @@ const monthLabel=k=>{
   const [y,m]=k.split("-").map(Number);
   return new Intl.DateTimeFormat("en-IE",{month:"long",year:"numeric"}).format(new Date(Date.UTC(y,m-1,1)));
 };
+const prizeMoneyView=PrizeMoney.mount({db:sb,seasonKey:SEASON_KEY,players:PLAYERS,monthLabel,esc});
 
 function renderPlayers(){
   document.getElementById("players").innerHTML=PLAYERS.map(p=>`<button class="${p===me?'active':''}" onclick="choosePlayer('${p}')">${p}</button>`).join("");
@@ -593,9 +614,15 @@ function updateAiAccess(){
  if(!allowed&&window.clearAiLabs)window.clearAiLabs();
  document.getElementById("betViewBtn").classList.remove("hidden");
  document.getElementById("matchViewBtn").classList.toggle("hidden",!loggedIn);
+ document.getElementById("prizeViewBtn").classList.toggle("hidden",!loggedIn);
+ document.getElementById("prizeShortcut").classList.toggle("hidden",!loggedIn);
  document.getElementById("mainViewTabs").style.gridTemplateColumns=allowed?"repeat(3,1fr)":loggedIn?"repeat(4,1fr)":"repeat(3,1fr)";
  if(!allowed && (!document.getElementById("aiView").classList.contains("hidden")||!document.getElementById("labsView").classList.contains("hidden"))) showView("game");
  if(!loggedIn && !document.getElementById("matchView").classList.contains("hidden")) showView("game");
+ if(!loggedIn){
+   prizeMoneyView.clear();
+   if(!document.getElementById("prizeView").classList.contains("hidden")) showView("game");
+ }
 }
 let matchAutoTimer=null;
 function showView(view){
@@ -606,14 +633,17 @@ function showView(view){
  const research=view==="research"&&loggedIn&&me==="Joe";
  const recap=view==="recap"&&recapAllowed();
  const group=view==="group";
+ const prize=view==="prize"&&loggedIn;
  document.getElementById("groupView").classList.toggle("hidden",!group);
  document.getElementById("groupViewBtn").classList.toggle("active",group);
+ document.getElementById("prizeView").classList.toggle("hidden",!prize);
+ document.getElementById("prizeViewBtn").classList.toggle("active",prize);
  document.getElementById("recapView").classList.toggle("hidden",!recap);
  document.getElementById("recapViewBtn").classList.toggle("active",recap);
  const bet=view==="bet";
  const stats=view==="stats";
  const match=view==="match"&&loggedIn;
- document.getElementById("gameView").classList.toggle("hidden",ai||labs||stats||match||bet||research||recap||group);
+ document.getElementById("gameView").classList.toggle("hidden",ai||labs||stats||match||bet||research||recap||group||prize);
  document.getElementById("researchView").classList.toggle("hidden",!research);
  document.getElementById("researchViewBtn").classList.toggle("active",research);
  document.getElementById("statsView").classList.toggle("hidden",!stats);
@@ -621,7 +651,7 @@ function showView(view){
  document.getElementById("aiView").classList.toggle("hidden",!ai);
   document.getElementById("labsView").classList.toggle("hidden",!labs);
  document.getElementById("betView").classList.toggle("hidden",!bet);
- document.getElementById("gameViewBtn").classList.toggle("active",!ai&&!labs&&!stats&&!match&&!bet&&!research&&!recap&&!group);
+ document.getElementById("gameViewBtn").classList.toggle("active",!ai&&!labs&&!stats&&!match&&!bet&&!research&&!recap&&!group&&!prize);
  document.getElementById("statsViewBtn").classList.toggle("active",stats);
  document.getElementById("aiViewBtn").classList.toggle("active",ai);
   document.getElementById("labsViewBtn").classList.toggle("active",labs);
@@ -634,6 +664,7 @@ function showView(view){
  if(research)refreshResearch();
  if(bet)refreshVirtualBetting();
  if(group){refreshGroupBets();startGroupBetAutoRefresh();}
+ if(prize)prizeMoneyView.refresh();
  if(match){refreshMatchCentre();matchAutoTimer=setInterval(()=>{if(!document.hidden&&loggedIn&&!document.getElementById("matchView").classList.contains("hidden"))refreshMatchCentre(true);},120000);}
 }
 
@@ -1108,6 +1139,8 @@ document.getElementById("labsViewBtn").onclick=()=>showView("labs");
 document.getElementById("researchViewBtn").onclick=()=>showView("research");
 document.getElementById("betViewBtn").onclick=()=>showView("bet");
 document.getElementById("groupViewBtn").onclick=()=>showView("group");
+document.getElementById("prizeViewBtn").onclick=()=>showView("prize");
+document.getElementById("prizeShortcut").onclick=()=>showView("prize");
 document.getElementById("recapViewBtn").onclick=()=>showView("recap");
 document.getElementById("refreshRecapBtn").onclick=refreshRecap;
 document.getElementById("recapRoundSelect").onchange=refreshRecap;
